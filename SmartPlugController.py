@@ -7,9 +7,10 @@ from kasa import SmartPlug #https://python-kasa.readthedocs.io/en/latest/index.h
 
 
 class SmartPlugController():
-    LATENCY = 2
+    LATENCY = 1.3
     def __init__( self, plug_ip:str, plug_name:str, home_network_name:str, tplink_creds:tuple=None, logging=True, printlogs=False):
         self.plug_ip = plug_ip
+        self.plug_name = plug_name
         self.home_network = home_network_name
         self.cloud_creds = tplink_creds
         self.logs = []
@@ -129,7 +130,7 @@ class SmartPlugController():
             self.log('Plug check failed!')
             return None
 
-    def set_plug(self, on=False, off=False, with_python=True, with_cloud=True):
+    def set_plug(self, on=False, off=False, use_python=True, use_cloud=True):
         if not (on or off):
             raise Exception('No plug control was set!')
         
@@ -143,7 +144,7 @@ class SmartPlugController():
             self.log('Plug was already set')
             return 0
         
-        if with_python:
+        if use_python:
             # python control first
             try:
                 self.log('Setting plug via python')
@@ -157,7 +158,7 @@ class SmartPlugController():
             # check if it worked and return if it did
             if self.__plug_set(on, off): return 0
 
-        if with_cloud:
+        if use_cloud:
             # otherwise try the cloud
             self.log('Setting plug via cloud')
             try:
