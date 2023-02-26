@@ -23,7 +23,7 @@ def main():
     plc = SmartPlugController(plug_ip, 'Ajak Smart Plug', 'JIR', None, printlogs=True)
 
     print("Setting Kasa SmartPlug '{}' to '{}'".format(plug_ip, plug_state))
-    plc.set_plug(on=(plug_state == 'on'), off=(plug_state == 'off'), with_cloud=False)
+    plc.set_plug(on=(plug_state == 'on'), off=(plug_state == 'off'), use_cloud=False)
     return 0
 
 if __name__ == '__main__':

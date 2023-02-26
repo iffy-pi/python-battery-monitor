@@ -365,7 +365,7 @@ def monitor_battery():
 
     log('Initializing Smart Plug Controller')
     global SMART_PLUG_CONTROLLER
-    SMART_PLUG_CONTROLLER = SmartPlugController( SMART_PLUG_IP_ADDRESS, 'Ajak Smart Plug', HOME_WIFI_NAME, TPLINK_CLOUD_CREDS)
+    SMART_PLUG_CONTROLLER = SmartPlugController( SMART_PLUG_IP_ADDRESS, 'Ajak Smart Plug', HOME_WIFI_NAME, tplink_creds=TPLINK_CLOUD_CREDS)
 
     if HEADLESS: started_notif()
 
@@ -428,7 +428,10 @@ def monitor_battery():
 
 
 def testing():
-    send_battery_alerts(high=True, last=True)
+    print(TPLINK_CLOUD_CREDS)
+    spc = SmartPlugController( SMART_PLUG_IP_ADDRESS, 'Ajak Smart Plug', HOME_WIFI_NAME, tplink_creds=TPLINK_CLOUD_CREDS)
+    spc.set_plug(on=True, use_python=False)
+    spc.print_logs()
 
 def main():
 

@@ -26,7 +26,7 @@ def main():
     
     if res == -2:
         print('Not on home network')
-        sleep(2)
+        sleep(1)
 
     return 0
 
