@@ -5,6 +5,10 @@ import asyncio
 from kasa import SmartDeviceException
 from kasa import SmartPlug #https://python-kasa.readthedocs.io/en/latest/index.html
 
+class SPCSubprocessException(Exception):
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
 
 class SmartPlugController():
     LATENCY = 1.3
@@ -44,12 +48,22 @@ class SmartPlugController():
         for l in self.dump_logs():
             print(l)
 
+    def __get_process_output(processargs: list, error_check=True):
+        child = subprocess.Popen(processargs, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = child.communicate()
+        err = err.decode('utf-8')
+        out = out.decode('utf-8')
+
+        if error_check and err.strip() != '':
+            raise SPCSubprocessException(f'Process Failed: "{err}"')
+
+        return out, err
+
     def on_home_network(self):
         if self.home_network == '':
             raise Exception('No home network provided!')
 
-        wifi = subprocess.check_output(['netsh', 'WLAN', 'show', 'interfaces'])
-        data = wifi.decode('utf-8')
+        data, _ = SmartPlugController.__get_process_output(['netsh', 'WLAN', 'show', 'interfaces'])
         data_lines = data.split('\n')
 
         info = {
@@ -92,22 +106,26 @@ class SmartPlugController():
             return
 
         # Sets the plug using the TPLinkCmd.exe instead of the python method
+        # TPLinkCmd is provided on windows store
+        # https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca
+        
         username, password = self.cloud_creds
         if username is None or password is None:
             raise Exception('No username and password information!')
         
-        child = subprocess.check_output(['tplinkcmd.exe', '-login', '-username', username, '-password', password])
 
-        for line in child.decode('utf-8').split('\n'):
+        output, _ = SmartPlugController.__get_process_output(['tplinkcmd.exe', '-login', '-username', username, '-password', password])
+
+        for line in output.split('\n'):
             self.log(line.strip())
 
         # send the command to the plug
-        child = subprocess.check_output(['tplinkcmd.exe', '-device', self.plug_name, '-on' if on else '-off'])
+        output, _ = SmartPlugController.__get_process_output(['tplinkcmd.exe', '-device', self.plug_name, '-on' if on else '-off'])
 
-        for line in child.decode('utf-8').split('\n'):
+        for line in output.split('\n'):
             self.log(line.strip())
 
-        time.sleep(3)
+        time.sleep(2)
 
     async def set_plug_via_python(self, on=False, off=False):
         plug = SmartPlug(self.plug_ip)
