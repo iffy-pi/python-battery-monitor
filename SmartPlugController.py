@@ -99,33 +99,43 @@ class SmartPlugController():
             raise Exception('Unrecognized interface name: "{}", reconfigure parsing!'.format(info['name']))
         
         return ( connected and network == self.home_network )
-    
-    def set_plug_via_cloud(self, on=False, off=False):
+
+    def run_tplinkcmd(self, cmdargs: list):
+        # cmargs is args to the tplinkcmd.exe
+
+        # uses TPLinkCmd.exe 
+        # TPLinkCmd is provided on windows store
+        # https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca
+
         if self.cloud_creds is None: 
             self.log('No credentials provided')
             return
 
-        # Sets the plug using the TPLinkCmd.exe instead of the python method
-        # TPLinkCmd is provided on windows store
-        # https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca
-        
         username, password = self.cloud_creds
         if username is None or password is None:
             raise Exception('No username and password information!')
         
-
         output, _ = SmartPlugController.__get_process_output(['tplinkcmd.exe', '-login', '-username', username, '-password', password])
 
         for line in output.split('\n'):
             self.log(line.strip())
 
         # send the command to the plug
-        output, _ = SmartPlugController.__get_process_output(['tplinkcmd.exe', '-device', self.plug_name, '-on' if on else '-off'])
+        output, _ = SmartPlugController.__get_process_output(['tplinkcmd.exe'] + cmdargs)
 
         for line in output.split('\n'):
             self.log(line.strip())
-
+    
+    def set_plug_via_cloud(self, on=False, off=False):
+        self.run_tplinkcmd(['-device', self.plug_name, '-on' if on else '-off'])
         time.sleep(2)
+
+    def start_plug_timer(self, secs, on=False, off=False):
+        hours = int(secs / 3600)
+        mins = int((secs % 3600) / 60)
+
+        self.run_tplinkcmd(['-device', self.plug_name, '-timer', 'start', '-h', hours, '-m', mins, '-action', '1' if on else '0'])
+        self.log('Started Timer for  {} hours and {} mins'.format(hours, mins))
 
     async def set_plug_via_python(self, on=False, off=False):
         plug = SmartPlug(self.plug_ip)
