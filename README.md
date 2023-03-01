@@ -1,9 +1,9 @@
 # Python PC Battery Monitor
 The scripts in this folder are designed to monitor the battery of the computer and handle it if it reaches a certain threshold.
 
-`battery_monitor.py` controls the Kasa smart plug when the battery reaches the floor and ceiling thresholds.
+battery_monitor.py controls the Kasa smart plug when the battery reaches the floor and ceiling thresholds.
 
-`battery_monitor.py` is what is in use at the moment and will be the focus of this README.
+battery_monitor.py is what is in use at the moment and will be the focus of this README.
 
 # Main function
 `battery_monitor.py` controls a Kasa Smart Plug (see https://www.kasasmart.com/us/products/smart-plugs) that is turned on or off when the battery reaches defined thresholds. The smart plug controls power to the PC and therefore acts as a way to turn on or turn off charging to the system.
@@ -11,6 +11,10 @@ The scripts in this folder are designed to monitor the battery of the computer a
 The battery percentage of the PC is checked periodically, this checking period is automatically determined based on the script configurations
 
 If the script fails to control the plug, a Windows Notification and an email (sent to `EMAIL_RECEIVER` defined in the script) is sent to notify the user.
+
+hibernate_off_plug.py checks if the plug is off and turns it off if not. This was designed to run before computer hibernation/shutdown to ensure battery does not over charge.
+
+bm.py is a command line utility to quickly check the status of the battery monitor windows scheduled task.
 
 
 # Script Usage
