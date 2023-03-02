@@ -18,22 +18,20 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import COMMASPACE
 from email import encoders
-from SmartPlugController import SmartPlugController
 
 # Windows notifications
 from winotify import Notification
 
+script_loc_dir = os.path.split(os.path.realpath(__file__))[0]
+if script_loc_dir not in sys.path:  sys.path.append(script_loc_dir)
+from SmartPlugController import SmartPlugController
 
-# Generate log files to this location
-LOG_FILES_DIR = 'C:\\Users\\omnic\\OneDrive\\Documents\\Misc\\battery_monitor'
+privlocdir = os.path.join(script_loc_dir, 'private')
+if privlocdir not in sys.path:  sys.path.append(privlocdir)
+from privateconfig import *
+
 # Icon used for windows10 notification
-WIN_NOTIF_ICON = 'C:\\Users\\omnic\\local\\GitRepos\\python-battery-monitor\\roboticon.png'
-
-# Configure who is sending the email, and who is receiving it
-EMAIL_SENDER = 'iffysbot@gmail.com' # email of the bot
-EMAIL_SENDER_PASS = keyring.get_password('python_bot_gmail_credential', EMAIL_SENDER) # bot account password
-EMAIL_RECEIVER = 'iffysbot@gmail.com' # email to send alerts to
-TPLINK_CLOUD_CREDS = ('omnictionarian.xp@gmail.com',  keyring.get_password('https://www.tplinkcloud.com', 'omnictionarian.xp@gmail.com') )
+WIN_NOTIF_ICON = os.path.join(script_loc_dir, 'roboticon.png')
 
 
 LOG_FILE_ADDR = os.path.join( LOG_FILES_DIR, 'status_{}_{}.log'.format(mydt.today().strftime('%H%M_%d_%m_%Y'), int(time.time())))
@@ -514,6 +512,16 @@ def main():
             default = 20
         )
 
+        # parser.add_argument(
+        #     "-logfile",
+        #     required=False,
+        #     type = int,
+        #     metavar='<Alert Attempts>',
+        #     help = "The maximum number of times an attempts made to notify you (Only done when smart plug control fails)",
+        #     default = 20
+        # )
+
+
         parser.add_argument(
             '--no-logs',
             '--no-logs',
@@ -565,8 +573,6 @@ def main():
 
         if options.headless:
             sys.stdout = LOG_FILE
-
-        script_print('Hello world')
 
         log('Script Started')
         log('Args: ( min={}%, max={}%, grain={}%, alert={}, attempts={})'.format(BATTERY_FLOOR, BATTERY_CEILING, GRAIN, options.alert, MAX_ATTEMPTS))
