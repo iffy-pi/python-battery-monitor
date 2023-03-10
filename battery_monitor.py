@@ -20,7 +20,9 @@ from email.utils import COMMASPACE
 from email import encoders
 
 # Windows notifications
-from winotify import Notification
+from winotify import Notification, audio
+from winsound import Beep as beep
+import threading
 
 script_loc_dir = os.path.split(os.path.realpath(__file__))[0]
 if script_loc_dir not in sys.path:  sys.path.append(script_loc_dir)
@@ -34,12 +36,11 @@ from privateconfig import *
 WIN_NOTIF_ICON = os.path.join(script_loc_dir, 'roboticon.png')
 
 
+
 LOG_FILE_ADDR = os.path.join( LOG_FILES_DIR, 'status_{}_{}.log'.format(mydt.today().strftime('%H%M_%d_%m_%Y'), int(time.time())))
 LOG_FILE = None
 ENABLE_LOGS = False
 PRINT_LOGS = False
-CLEAR_PERIOD = 15 # write log file every one minute
-LAST_CLEAR = int(time.time())
 
 def send_email_from_bot(text, subject, mainRecipient, recipients, files=[], important=False, content="text", verbose=False):
     if not isinstance(recipients, list):
@@ -212,6 +213,22 @@ def get_battery_info():
     battery = psutil.sensors_battery() 
     return battery.percent, battery.power_plugged
 
+
+def do_beeps():
+    # use winsound to generate beeps
+    for _ in range(3):
+        beep(750, 1000)
+
+def do_beeps_threaded():
+    # just runs it in its own thread
+    x = threading.Thread(target=do_beeps)
+    x.start()
+
+def send_notification(title, body):
+    toast = Notification('Battery Monitor Bot', title, msg=body, icon=WIN_NOTIF_ICON)
+    toast.show()
+
+
 def get_alert_info(low=False, high=False, last=False):
     
     curbattery, _ = get_battery_info()
@@ -243,27 +260,18 @@ def get_alert_info(low=False, high=False, last=False):
 def send_battery_alerts(low=False, high=False, email=False, last=False):
     email_title, title, body = get_alert_info(low=low, high=high, last=last)
 
+    # make sound
+    do_beeps_threaded()
+
     # windows 10 notification
-    log('Initializing Toast Notifier Object')
-    toast = Notification('Battery Monitor Bot', title, msg=body, icon=WIN_NOTIF_ICON)
-    log('Calling Toast Show function')
     lprint('Showing Windows Notification...')
-    toast.show()
+    send_notification(title, body)
 
     if email:
         # send the email alert
         subject = '{} - {}'.format(email_title, mydt.now().strftime('%b %d %Y %H:%M'))
         send_email_from_bot(body, subject, EMAIL_RECEIVER, [], important=(low or last))
         lprint('Email Alert Sent!')
-
-def started_notif():
-    toast = Notification(
-        'Battery Monitor Bot', 
-        'Headless Battery Monitor', 
-        msg='Battery monitor started successfully and running in headless mode.',
-        icon=WIN_NOTIF_ICON)
-    toast.show()    
-
 
 def predict_sleep_period(current, prev, window, delta=5, init_prediction=10):
     # based on process burst prediction: q_(n+1) = a*t_n + (1-a)q_n 
@@ -424,12 +432,15 @@ def monitor_battery():
                     lprint('While loop exited from keyboard interrupt')
                     return
 
+def started_notif():
+    send_notification('Headless Battery Monitor', 'Battery monitor started successfully and running in headless mode.')  
 
 def testing():
-    print(TPLINK_CLOUD_CREDS)
-    spc = SmartPlugController( SMART_PLUG_IP_ADDRESS, 'Ajak Smart Plug', HOME_WIFI_NAME, tplink_creds=TPLINK_CLOUD_CREDS)
-    spc.set_plug(on=True, use_python=False)
-    spc.print_logs()
+    print('Running!')
+    x = threading.Thread(target=do_beeps)
+    x.start()
+    print('Done!')
+
 
 def main():
 
@@ -590,8 +601,15 @@ def main():
         script_print('\nSystem Interrupt')
         return 1
     except Exception as e:
-        lprint('Script Exception: "{}"'.format(str(e)))
-        traceback.print_exc()
+        lprint('Script Exception: "{}"'.format(e))
+
+        if HEADLESS:
+            send_notification(
+                'Headless Battery Monitor Failure',
+                'Error: "{}"'.format(e)
+            )
+        else:
+            traceback.print_exc()
 
     return 0
 
