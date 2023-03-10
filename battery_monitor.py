@@ -20,7 +20,7 @@ from email.utils import COMMASPACE
 from email import encoders
 
 # Windows notifications
-from winotify import Notification, audio
+from winotify import Notification
 from winsound import Beep as beep
 import threading
 
@@ -262,6 +262,7 @@ def send_battery_alerts(low=False, high=False, email=False, sound=False, last=Fa
 
     # make sound
     if sound:
+        lprint('Playing sound..')
         do_beeps_threaded()
 
     # windows 10 notification
@@ -273,42 +274,6 @@ def send_battery_alerts(low=False, high=False, email=False, sound=False, last=Fa
         subject = '{} - {}'.format(email_title, mydt.now().strftime('%b %d %Y %H:%M'))
         send_email_from_bot(body, subject, EMAIL_RECEIVER, [], important=(low or last))
         lprint('Email Alert Sent!')
-
-def predict_sleep_period(current, prev, window, delta=5, init_prediction=10):
-    # based on process burst prediction: q_(n+1) = a*t_n + (1-a)q_n 
-    # init_prediction (q_0) is first prediction for amount of seconds to change delta%
-    # window is the measured amount of time in seconds between current and prev battery measurements
-    # a is weighting parameter, a=1 means only base on current behaviour, a=0 means based on previous behaviour
-    # cur_ct (t_n) is the amount of time it took to change delta%
-    # pred_ct (q_n) is the predicted time it took to change delta% ( corresponds to q_(n-1))
-    # next_pred_ct (q_(n+1)) is the predicted time to change delta% for next iteration
-
-    a = 0.89
-
-    if prev is None or window is None:
-        log(f'Initial Prediction Used, Prediction: {timestr(init_prediction)}')
-        return init_prediction
-
-    # how much percent changed per second, assuming linear
-    change_rate = abs(current-prev)/float(window)
-
-    if change_rate == 0.0:
-        # if no change in battery
-        # just add like 5 mins to predicted time
-        log(f'No Battery Change, Prediction: {timestr(window*2)}')
-        return window*2
-
-    # calculate how much time it takes to change by percent
-    cur_ct = delta / change_rate
-
-    # window will be what we predicted before
-    pred_ct = float(window)
-
-    next_pred_ct = a*cur_ct + (1-a)*pred_ct
-
-    log(f'Applied Estimation, Prediction: {timestr(int(next_pred_ct))}')
-
-    return int(next_pred_ct)
 
 def handle_battery_case(high_battery, low_battery):
     local_notif_sent = False
@@ -353,7 +318,7 @@ def handle_battery_case(high_battery, low_battery):
         # before email, wait time is 120s
 
         msg = 'Notifying With: Windows Notification'
-        wait_for = 10 if attempts_made < 2 else ALERT_PERIOD
+        wait_for = 120 if attempts_made < 2 else ALERT_PERIOD
 
         if attempts_made >= 1: # after first attempt use sound
             msg += ', Sound'
@@ -379,6 +344,41 @@ def handle_battery_case(high_battery, low_battery):
         # get the charging info again and reloop
         _ , charging = get_battery_info()
 
+def predict_sleep_period(current, prev, window, delta=5, init_prediction=10):
+    # based on process burst prediction: q_(n+1) = a*t_n + (1-a)q_n 
+    # init_prediction (q_0) is first prediction for amount of seconds to change delta%
+    # window is the measured amount of time in seconds between current and prev battery measurements
+    # a is weighting parameter, a=1 means only base on current behaviour, a=0 means based on previous behaviour
+    # cur_ct (t_n) is the amount of time it took to change delta%
+    # pred_ct (q_n) is the predicted time it took to change delta% ( corresponds to q_(n-1))
+    # next_pred_ct (q_(n+1)) is the predicted time to change delta% for next iteration
+
+    a = 0.89
+
+    if prev is None or window is None:
+        log(f'Initial Prediction Used, Prediction: {timestr(init_prediction)}')
+        return init_prediction
+
+    # how much percent changed per second, assuming linear
+    change_rate = abs(current-prev)/float(window)
+
+    if change_rate == 0.0:
+        # if no change in battery
+        # just add like 5 mins to predicted time
+        log(f'No Battery Change, Prediction: {timestr(window*2)}')
+        return window*2
+
+    # calculate how much time it takes to change by percent
+    cur_ct = delta / change_rate
+
+    # window will be what we predicted before
+    pred_ct = float(window)
+
+    next_pred_ct = a*cur_ct + (1-a)*pred_ct
+
+    log(f'Applied Estimation, Prediction: {timestr(int(next_pred_ct))}')
+
+    return int(next_pred_ct)
 
 def monitor_battery():
     cur_percent = None
