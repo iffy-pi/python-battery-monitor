@@ -257,11 +257,12 @@ def get_alert_info(low=False, high=False, last=False):
 
     return email_title, title, body
 
-def send_battery_alerts(low=False, high=False, email=False, last=False):
+def send_battery_alerts(low=False, high=False, email=False, sound=False, last=False):
     email_title, title, body = get_alert_info(low=low, high=high, last=last)
 
     # make sound
-    do_beeps_threaded()
+    if sound:
+        do_beeps_threaded()
 
     # windows 10 notification
     lprint('Showing Windows Notification...')
@@ -313,10 +314,11 @@ def handle_battery_case(high_battery, low_battery):
     local_notif_sent = False
     _ , charging = get_battery_info()
     attempts_left = MAX_ATTEMPTS
+    attempts_made = 0
 
     while (low_battery and not charging) or (high_battery and charging):
 
-        if attempts_left == 0:
+        if attempts_made == MAX_ATTEMPTS:
             lprint('No More Attempts Remaining!')
             break
 
@@ -342,20 +344,35 @@ def handle_battery_case(high_battery, low_battery):
             lprint('Issue Resolved')
             break
 
+        
         lprint('Failed to control smart plug, manual assistance required')
 
-        # send local notification first and wait small amount of time
-        # case where they are close to their computer
-        # otherwise send notification and email
-        msg = 'Sending Only Notification' if not local_notif_sent else 'Sending Notification and Email' 
-        wait_for = 120 if not local_notif_sent else ALERT_PERIOD
-        send_notif_email = local_notif_sent # False if we have not sent local notification yet
+        # first attempt do only windows notif (if theyre on thier computer)
+        # second attempt is windows notif and sound (looking away)
+        # other attempts after use windows notif, sound and email
+        # before email, wait time is 120s
 
-        if not local_notif_sent: local_notif_sent = True # set once we hit it
+        msg = 'Notifying With: Windows Notification'
+        wait_for = 10 if attempts_made < 2 else ALERT_PERIOD
+
+        if attempts_made >= 1: # after first attempt use sound
+            msg += ', Sound'
+
+        if attempts_made >= 2: # after second attempt use email
+            msg += ', Email'
 
         lprint( msg )
-        send_battery_alerts(low=low_battery, high=high_battery, email=send_notif_email, last=(attempts_left==1))
-        attempts_left = attempts_left-1
+
+        send_battery_alerts(
+            low=low_battery,
+            high=high_battery,
+            sound=(attempts_made >= 1),
+            email=(attempts_made >= 2),
+            last=(attempts_made == MAX_ATTEMPTS -1 )
+        )
+
+        attempts_made += 1
+        
         lprint(f'Waiting {timestr(wait_for)} for user action...')
         verbose_sleep(secs=wait_for)
 
