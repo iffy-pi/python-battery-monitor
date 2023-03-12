@@ -380,6 +380,39 @@ def predict_sleep_period(current, prev, window, delta=5, init_prediction=10):
 
     return int(next_pred_ct)
 
+def get_battery_cases(cur_percent, charging, pred_sleep_period):
+    # returns if we are in a low battery case and or high battery case
+
+    # handle standard cases
+    below_thresh = cur_percent <= BATTERY_FLOOR
+    above_thresh = cur_percent >= BATTERY_CEILING
+
+    if below_thresh or above_thresh:
+        return (below_thresh and not charging), (above_thresh and charging)
+
+
+    # if we go out of threshold bounds during sleep, want to handle it preemptively
+    # that would happen if thresh_drop_period < sleep_period
+    period_per_percent = pred_sleep_period / GRAIN
+
+    # amount of time it would take to reach threshold
+    below_thresh_time = int(period_per_percent * ( cur_percent - BATTERY_FLOOR))
+    above_thresh_time = int(period_per_percent * (BATTERY_CEILING - cur_percent))
+
+
+    below_thresh = below_thresh_time < pred_sleep_period
+    above_thresh = above_thresh_time < pred_sleep_period
+
+    if below_thresh or above_thresh:
+        lprint('Pre-emptive threshold prediction: time to reach {} ({}) is less than next predicted sleep period ({})'.format(
+            'battery floor' if below_thresh else 'battery ceiling',
+            timestr(below_thresh_time) if below_thresh else timestr(above_thresh_time),
+            timestr(pred_sleep_period)
+            ))
+
+    return ( below_thresh and not charging), (above_thresh and charging)
+
+
 def monitor_battery():
     cur_percent = None
     prev_percent = None
@@ -419,10 +452,7 @@ def monitor_battery():
 
             lprint('Battery: {}%, Charging: {}'.format(percent, 'Yes' if charging else 'No'))
 
-            # within three percent range
-            low_battery = ( percent <= BATTERY_FLOOR+3 ) and (not charging)
-            high_battery = ( percent >= BATTERY_CEILING-3 ) and (charging)
-
+            low_battery , high_battery = get_battery_cases(cur_percent, charging, predict_sleep_period(cur_percent, prev_percent, sleep_period, delta=GRAIN))
 
             if not ( high_battery or low_battery ):
                 # no need to alert, continue to sleep
