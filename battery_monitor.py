@@ -574,7 +574,7 @@ def monitor_battery():
                     return
 
 def started_notif():
-    send_notification('Headless Battery Monitor', 'Battery monitor started successfully and running in headless mode.')  
+    send_notification('Headless Battery Monitor', 'Battery monitor started successfully and running in headless mode. Log file: {}'.format(os.path.split(LOG_FILE_ADDR)[1]))  
 
 def testing():
     print('Running!')
