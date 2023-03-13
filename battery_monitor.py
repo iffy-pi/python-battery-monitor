@@ -38,10 +38,6 @@ WIN_NOTIF_ICON = os.path.join(script_loc_dir, 'roboticon.png')
 
 
 LOG_FILE_ADDR = os.path.join( LOG_FILES_DIR, 'status_{}_{}.log'.format(mydt.today().strftime('%H%M_%d_%m_%Y'), int(time.time())))
-LOG_FILE = None
-ENABLE_LOGS = False
-PRINT_LOGS = False
-SECS_SINCE_SLEEP_PRED = 0
 
 def send_email_from_bot(text, subject, mainRecipient, recipients, files=[], important=False, content="text", verbose=False):
     if not isinstance(recipients, list):
@@ -459,9 +455,7 @@ def send_battery_alerts(low=False, high=False, email=False, sound=False, last=Fa
         OUTSTREAM.printlg('Email Alert Sent!')
 
 def handle_battery_case(high_battery, low_battery):
-    local_notif_sent = False
     _ , charging = get_battery_info()
-    attempts_left = MAX_ATTEMPTS
     attempts_made = 0
 
     while (low_battery and not charging) or (high_battery and charging):
@@ -533,17 +527,6 @@ def handle_battery_case(high_battery, low_battery):
 
 def monitor_battery():
     itr = 0
-
-    OUTSTREAM.log('Initializing Smart Plug Controller')
-    global SMART_PLUG_CONTROLLER
-    SMART_PLUG_CONTROLLER = SmartPlugController( SMART_PLUG_IP_ADDRESS, 'Ajak Smart Plug', HOME_WIFI_NAME, tplink_creds=TPLINK_CLOUD_CREDS)
-
-    global SLEEP_CONTROLLER
-    SLEEP_CONTROLLER = ScriptSleepController(BATTERY_FLOOR, BATTERY_CEILING,des_percent_drop=GRAIN)
-
-
-    if HEADLESS: started_notif()
-
     OUTSTREAM.log('Entering While Loop')
     
     while True:
@@ -603,23 +586,17 @@ def testing():
 def main():
 
     global OUTSTREAM
+    global BATTERY_FLOOR
+    global BATTERY_CEILING
+    global ALERT_PERIOD
+    global MAX_ATTEMPTS
+    global HEADLESS
+    global SMART_PLUG_CONTROLLER
+    global SLEEP_CONTROLLER
+
     OUTSTREAM = ScriptStdOut.getInstance(logfileaddr=LOG_FILE_ADDR, enablelogs=False, headless=False, printlogs=False)
 
     try:
-
-        global BATTERY_FLOOR
-        global BATTERY_CEILING
-        global ALERT_PERIOD
-        global GRAIN
-        global SMART_PLUG_IP_ADDRESS
-        global HOME_WIFI_NAME
-        global MAX_ATTEMPTS
-        global ENABLE_LOGS 
-        global PRINT_LOGS
-        global LOG_FILE
-        global HEADLESS
-
-
         parser = argparse.ArgumentParser()
 
         parser.add_argument(
@@ -728,9 +705,6 @@ def main():
         ALERT_PERIOD = parse_time_str_to_seconds( options.alert )
         BATTERY_FLOOR = options.min
         BATTERY_CEILING = options.max
-        GRAIN = options.grain
-        HOME_WIFI_NAME = options.home_wifi
-        SMART_PLUG_IP_ADDRESS = options.plug_ip
         MAX_ATTEMPTS = options.max_attempts
         HEADLESS = options.headless
 
@@ -749,14 +723,22 @@ def main():
             return 0
 
         OUTSTREAM.log('Script Started')
-        OUTSTREAM.log('Args: ( min={}%, max={}%, grain={}%, alert={}, attempts={})'.format(BATTERY_FLOOR, BATTERY_CEILING, GRAIN, options.alert, MAX_ATTEMPTS))
+        OUTSTREAM.log('Args: ( min={}%, max={}%, grain={}%, alert={}, attempts={})'.format(BATTERY_FLOOR, BATTERY_CEILING, options.grain, options.alert, MAX_ATTEMPTS))
         OUTSTREAM.print('Script Configuration:')
         OUTSTREAM.print(f'Battery Minimum: {BATTERY_FLOOR}%')
         OUTSTREAM.print(f'Battery Maximum: {BATTERY_CEILING}%')
-        OUTSTREAM.print(f'Check Battery Every: {GRAIN}%')
+        OUTSTREAM.print(f'Check Battery Every: {options.grain}%')
         OUTSTREAM.print(f'Alert Period: {options.alert}')
         OUTSTREAM.print(f'Max Alert Attempts: {MAX_ATTEMPTS}')
         OUTSTREAM.print('')
+
+        if HEADLESS: started_notif()
+
+        OUTSTREAM.log('Initializing Smart Plug Controller')
+        SMART_PLUG_CONTROLLER = SmartPlugController( options.plug_ip, 'Ajak Smart Plug', options.home_wifi, tplink_creds=TPLINK_CLOUD_CREDS)
+        OUTSTREAM.log('Initializing Sleep Controller')
+        SLEEP_CONTROLLER = ScriptSleepController(BATTERY_FLOOR, BATTERY_CEILING, des_percent_drop=options.grain)
+
         monitor_battery()
         OUTSTREAM.log('Script Ended')
 
