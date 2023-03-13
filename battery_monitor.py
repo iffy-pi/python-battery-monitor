@@ -41,6 +41,7 @@ LOG_FILE_ADDR = os.path.join( LOG_FILES_DIR, 'status_{}_{}.log'.format(mydt.toda
 LOG_FILE = None
 ENABLE_LOGS = False
 PRINT_LOGS = False
+SECS_SINCE_SLEEP_PRED = 0
 
 def send_email_from_bot(text, subject, mainRecipient, recipients, files=[], important=False, content="text", verbose=False):
     if not isinstance(recipients, list):
@@ -218,6 +219,132 @@ def get_battery_info():
     return battery.percent, battery.power_plugged
 
 
+class ScriptSleepController():
+    # controller used to manage script sleeping
+    # accounts for things like predictive sleep, accurate sleep near thresholds and script sleep drift
+    # designed to be a Singleton Class
+
+    def __init__(self, battery_floor, battery_ceiling, des_percent_drop=5, init_pred=10):
+        self.cur_percent = None
+        self.prev_percent = None
+        self.sleep_period = None
+        self.battery_floor = battery_floor
+        self.battery_ceiling = battery_ceiling
+        self.des_percent_drop = des_percent_drop
+        self.init_pred = init_pred
+        self.pred_drift = 0
+
+    # To make predicted sleep time more accurate, need to account for time script spends handling battery cases
+    # time.time() cannot be used since it is unix timestamp, so PC hibernation will mess up prediction
+    # Instead keep track of seconds slept in script with the below functions (drift)
+    # drift is added to predict sleep period to account for time since last check and is reset in percent check
+    # Assumption is that other parts of script that are not sleeping take negligible time
+
+    def track_drift(self, secs):
+        self.pred_drift += secs
+
+    def reset_drift(self):
+        self.pred_drift = 0
+
+    def track_sleep(self, secs:int):
+        # increments time sincle last slepts and calls verbose sleep
+        self.track_drift(secs)
+        verbose_sleep(secs=secs)
+
+    def predict_sleep_period(self):
+        # predicts the amount of time to sleep so that we check the battery every (des_percent_drop)%
+
+        # based on process burst prediction: q_(n+1) = a*t_n + (1-a)q_n 
+        # init_prediction (q_0) is first prediction for amount of seconds to change delta%
+        # window is the measured amount of time in seconds between current and prev battery measurements
+        # a is weighting parameter, a=1 means only base on current behaviour, a=0 means based on previous behaviour
+        # cur_ct (t_n) is the amount of time it took to change delta%
+        # pred_ct (q_n) is the predicted time it took to change delta% ( corresponds to q_(n-1))
+        # next_pred_ct (q_(n+1)) is the predicted time to change delta% for next iteration
+
+        a = 0.89
+
+        cur_percent = self.cur_percent
+        prev_percent = self.prev_percent
+        prev_pred = self.sleep_period
+        init_pred = self.init_pred
+        des_percent_drop = self.des_percent_drop
+
+        if prev_percent is None or prev_pred is None:
+            log(f'Initial Prediction Used, Prediction: {timestr(init_pred)}')
+            return init_pred
+
+        percent_drop_per_sec = abs(cur_percent - prev_percent) / float(prev_pred)
+
+        if percent_drop_per_sec == 0.0:
+            # no change in battery
+            # double the prediction
+            log('No Change, doubled the prediction.')
+            return prev_pred*2
+
+        # calculate the actual time it would take to drop by our desired percent
+        actual_drop_period = des_percent_drop / percent_drop_per_sec
+
+        # use the round robin formulat to calculate our next prediction
+        next_pred = int( a*actual_drop_period + (1-a)*prev_pred )
+
+        return next_pred
+
+    def get_sleep_period(self):
+        cur_percent = self.cur_percent
+        pred_sleep_period = self.predict_sleep_period()
+
+        # gets the sleep period we want the program to sleep for
+        # can either be the predicted period, or shorter 
+
+        # Will be shorter if (time for battery % to go out of bounds ) < predicted period
+
+        # First calculate the time for the battery to go out of bounds
+        percent_drop_per_sec = pred_sleep_period / self.des_percent_drop
+
+        fall_below_thresh_time = max(1, int(percent_drop_per_sec * abs( cur_percent - self.battery_floor)))
+        go_above_thresh_time = max(1, int(percent_drop_per_sec * abs(self.battery_ceiling - cur_percent)))
+
+        use_below_thresh = fall_below_thresh_time < pred_sleep_period
+        use_above_thresh = go_above_thresh_time < pred_sleep_period
+
+        script_print('Above ({}) vs Predicted ({})'.format(timestr(go_above_thresh_time), timestr(pred_sleep_period)))
+        script_print('Below ({}) vs Predicted ({})'.format(timestr(fall_below_thresh_time), timestr(pred_sleep_period)))
+
+        if use_below_thresh or use_above_thresh:
+            # one of these cases is true, use that as the sleep period
+            lprint('Using Pre-emptive threshold prediction: time to reach {} ({}) is less than next predicted sleep period ({})'.format(
+                'battery floor' if use_below_thresh else 'battery ceiling',
+                timestr(fall_below_thresh_time) if use_below_thresh else timestr(go_above_thresh_time),
+                timestr(pred_sleep_period)
+                ))
+
+            return fall_below_thresh_time if use_below_thresh else go_above_thresh_time
+
+
+        # none of them match, just use same sleep period
+        lprint(f'Using standard prediction: {timestr(int(pred_sleep_period))}')
+        return pred_sleep_period
+
+    def sleep(self):
+        self.prev_percent = self.cur_percent
+        self.cur_percent, _ = get_battery_info()
+
+        # does the required sleep
+        if self.sleep_period is not None:
+            if self.pred_drift > 0:
+                lprint(f'Added {timestr(self.pred_drift)} to initial sleep prediction ({timestr(self.sleep_period)})')
+                self.sleep_period += self.pred_drift
+
+        self.reset_drift()
+
+        self.sleep_period = self.get_sleep_period()
+
+        #sleeping the sleep period
+        lprint(f'Sleeping {timestr(self.sleep_period)}...')
+        verbose_sleep( secs=self.sleep_period )
+
+
 def do_beeps():
     # use winsound to generate beeps
     for _ in range(3):
@@ -305,7 +432,9 @@ def handle_battery_case(high_battery, low_battery):
             lprint(f'Something went wrong: {e}')
 
         script_print('Waiting 5 seconds for verification')
-        verbose_sleep(5)
+
+        SLEEP_CONTROLLER.track_sleep(5)
+
         _ , charging = get_battery_info()
 
         if ( low_battery and charging ) or ( high_battery and not charging):
@@ -343,122 +472,23 @@ def handle_battery_case(high_battery, low_battery):
         attempts_made += 1
         
         lprint(f'Waiting {timestr(wait_for)} for user action...')
-        verbose_sleep(secs=wait_for)
+        SLEEP_CONTROLLER.track_sleep(wait_for)
 
         # get the charging info again and reloop
         _ , charging = get_battery_info()
 
-def predict_sleep_period(cur_percent, prev_percent, prev_pred, des_percent_drop=5, init_pred=10):
-    # predicts the amount of time to sleep so that we check the battery every (des_percent_drop)%
-
-    # based on process burst prediction: q_(n+1) = a*t_n + (1-a)q_n 
-    # init_prediction (q_0) is first prediction for amount of seconds to change delta%
-    # window is the measured amount of time in seconds between current and prev battery measurements
-    # a is weighting parameter, a=1 means only base on current behaviour, a=0 means based on previous behaviour
-    # cur_ct (t_n) is the amount of time it took to change delta%
-    # pred_ct (q_n) is the predicted time it took to change delta% ( corresponds to q_(n-1))
-    # next_pred_ct (q_(n+1)) is the predicted time to change delta% for next iteration
-
-    a = 0.89
-
-    if prev_percent is None or prev_pred is None:
-        log(f'Initial Prediction Used, Prediction: {timestr(init_pred)}')
-        return init_pred
-
-    percent_drop_per_sec = abs(cur_percent - prev_percent) / float(prev_pred)
-
-    if percent_drop_per_sec == 0.0:
-        # no change in battery
-        # double the prediction
-        log('No Change, doubled the prediction.')
-        return prev_pred*2
-
-    # calculate the actual time it would take to drop by our desired percent
-    actual_drop_period = des_percent_drop / percent_drop_per_sec
-
-    # use the round robin formulat to calculate our next prediction
-    next_pred = int( a*actual_drop_period + (1-a)*prev_pred )
-
-    return next_pred
-
-
-
-def get_sleep_period(cur_percent, pred_sleep_period):
-    # gets the sleep period we want the program to sleep for
-    # can either be the predicted period, or shorter 
-
-    # Will be shorter if (time for battery % to go out of bounds ) < predicted period
-
-    # First calculate the time for the battery to go out of bounds
-    percent_drop_per_sec = pred_sleep_period / GRAIN
-
-    fall_below_thresh_time = max(1, int(percent_drop_per_sec * abs( cur_percent - BATTERY_FLOOR)))
-    go_above_thresh_time = max(1, int(percent_drop_per_sec * abs(BATTERY_CEILING - cur_percent)))
-
-    use_below_thresh = fall_below_thresh_time < pred_sleep_period
-    use_above_thresh = go_above_thresh_time < pred_sleep_period
-
-    script_print('Above ({}) vs Predicted ({})'.format(timestr(go_above_thresh_time), timestr(pred_sleep_period)))
-    script_print('Below ({}) vs Predicted ({})'.format(timestr(fall_below_thresh_time), timestr(pred_sleep_period)))
-
-    if use_below_thresh or use_above_thresh:
-        # one of these cases is true, use that as the sleep period
-        lprint('Using Pre-emptive threshold prediction: time to reach {} ({}) is less than next predicted sleep period ({})'.format(
-            'battery floor' if use_below_thresh else 'battery ceiling',
-            timestr(fall_below_thresh_time) if use_below_thresh else timestr(go_above_thresh_time),
-            timestr(pred_sleep_period)
-            ))
-
-        return fall_below_thresh_time if use_below_thresh else go_above_thresh_time
-
-
-    # none of them match, just use same sleep period
-    lprint(f'Using standard prediction: {timestr(int(pred_sleep_period))}')
-    return pred_sleep_period
-
-
-def get_battery_cases(cur_percent, charging, pred_sleep_period):
-    # returns if we are in a low battery case and or high battery case
-
-    # handle standard cases
-    below_thresh = cur_percent <= BATTERY_FLOOR
-    above_thresh = cur_percent >= BATTERY_CEILING
-
-    # if below_thresh or above_thresh:
-    return (below_thresh and not charging), (above_thresh and charging)
-
-
-    # # if we go out of threshold bounds during sleep, want to handle it preemptively
-    # # that would happen if thresh_drop_period < sleep_period
-    # period_per_percent = pred_sleep_period / GRAIN
-
-    # # amount of time it would take to reach threshold
-    # below_thresh_time = int(period_per_percent * ( cur_percent - BATTERY_FLOOR))
-    # above_thresh_time = int(period_per_percent * (BATTERY_CEILING - cur_percent))
-
-
-    # below_thresh = below_thresh_time < pred_sleep_period
-    # above_thresh = above_thresh_time < pred_sleep_period
-
-    # if below_thresh or above_thresh:
-    #     lprint('Pre-emptive threshold prediction: time to reach {} ({}) is less than next predicted sleep period ({})'.format(
-    #         'battery floor' if below_thresh else 'battery ceiling',
-    #         timestr(below_thresh_time) if below_thresh else timestr(above_thresh_time),
-    #         timestr(pred_sleep_period)
-    #         ))
-
-    # return ( below_thresh and not charging), (above_thresh and charging)
 
 
 def monitor_battery():
-    cur_percent = None
-    prev_percent = None
-    sleep_period = None
     itr = 0
 
     log('Initializing Smart Plug Controller')
     global SMART_PLUG_CONTROLLER
     SMART_PLUG_CONTROLLER = SmartPlugController( SMART_PLUG_IP_ADDRESS, 'Ajak Smart Plug', HOME_WIFI_NAME, tplink_creds=TPLINK_CLOUD_CREDS)
+
+    global SLEEP_CONTROLLER
+    SLEEP_CONTROLLER = ScriptSleepController(BATTERY_FLOOR, BATTERY_CEILING,des_percent_drop=GRAIN)
+
 
     if HEADLESS: started_notif()
 
@@ -471,23 +501,17 @@ def monitor_battery():
 
             # put sleep first, doing so to eliminate if statements
             if itr > 0:
+                SLEEP_CONTROLLER.sleep()
 
-                prev_percent = cur_percent
-                cur_percent, _ = get_battery_info()
-
-                # predict the sleep period from our prediction function
-                sleep_period = get_sleep_period(cur_percent, predict_sleep_period(cur_percent, prev_percent, pred_sleep_period, des_percent_drop=GRAIN))
-                #sleeping the sleep period
-                lprint(f'Sleeping {timestr(sleep_period)}...')
-                verbose_sleep( secs=sleep_period )
 
             # get the battery percentage
             log('Obtaining Battery Info')
-            percent, charging = get_battery_info()
+            cur_percent, charging = get_battery_info()
 
-            lprint('Battery: {}%, Charging: {}'.format(percent, 'Yes' if charging else 'No'))
+            lprint('Battery: {}%, Charging: {}'.format(cur_percent, 'Yes' if charging else 'No'))
 
-            low_battery , high_battery = get_battery_cases(percent, charging, None)
+            low_battery = (cur_percent <= BATTERY_FLOOR) and (not charging)
+            high_battery = (cur_percent >= BATTERY_CEILING) and charging
 
             if not ( high_battery or low_battery ):
                 # no need to alert, continue to sleep
@@ -508,7 +532,7 @@ def monitor_battery():
                 try:
 
                     print('\nPress Ctrl+C again in 10s to end script')
-                    verbose_sleep(secs=10)
+                    SLEEP_CONTROLLER.track_sleep(secs=10)
                     itr = 0
                 except KeyboardInterrupt:
                     lprint('While loop exited from keyboard interrupt')
