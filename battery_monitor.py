@@ -454,7 +454,6 @@ def monitor_battery():
     cur_percent = None
     prev_percent = None
     sleep_period = None
-    pred_sleep_period = None # used in maintaining predictions
     itr = 0
 
     log('Initializing Smart Plug Controller')
@@ -477,8 +476,7 @@ def monitor_battery():
                 cur_percent, _ = get_battery_info()
 
                 # predict the sleep period from our prediction function
-                pred_sleep_period = predict_sleep_period(cur_percent, prev_percent, pred_sleep_period, des_percent_drop=GRAIN)
-                sleep_period = get_sleep_period(cur_percent, pred_sleep_period)
+                sleep_period = get_sleep_period(cur_percent, predict_sleep_period(cur_percent, prev_percent, pred_sleep_period, des_percent_drop=GRAIN))
                 #sleeping the sleep period
                 lprint(f'Sleeping {timestr(sleep_period)}...')
                 verbose_sleep( secs=sleep_period )
