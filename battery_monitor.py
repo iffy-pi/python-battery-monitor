@@ -265,15 +265,13 @@ class ScriptSleepController():
         use_below_thresh = (fall_below_thresh_time < pred_sleep_period) and not self.charging
         use_above_thresh = (go_above_thresh_time < pred_sleep_period) and self.charging
 
-        OUTSTREAM.print('Above ({}) vs Predicted ({})'.format(timestr(go_above_thresh_time), timestr(pred_sleep_period)))
-        OUTSTREAM.print('Below ({}) vs Predicted ({})'.format(timestr(fall_below_thresh_time), timestr(pred_sleep_period)))
+        # OUTSTREAM.print('Above ({}) vs Predicted ({})'.format(timestr(go_above_thresh_time), timestr(pred_sleep_period)))
+        # OUTSTREAM.print('Below ({}) vs Predicted ({})'.format(timestr(fall_below_thresh_time), timestr(pred_sleep_period)))
 
         if use_below_thresh or use_above_thresh:
             # one of these cases is true, use that as the sleep period
-            OUTSTREAM.printlg('Using Pre-emptive threshold prediction: time to reach {} ({}) is less than next predicted sleep period ({})'.format(
-                'battery floor' if use_below_thresh else 'battery ceiling',
+            OUTSTREAM.printlg('Using Pre-emptive threshold prediction: {}'.format(
                 timestr(fall_below_thresh_time) if use_below_thresh else timestr(go_above_thresh_time),
-                timestr(pred_sleep_period)
                 ))
 
             return fall_below_thresh_time if use_below_thresh else go_above_thresh_time
@@ -290,7 +288,7 @@ class ScriptSleepController():
         # does the required sleep
         if self.sleep_period is not None:
             if self.pred_drift > 0:
-                OUTSTREAM.printlg(f'Added {timestr(self.pred_drift)} to initial sleep prediction ({timestr(self.sleep_period)})')
+                OUTSTREAM.printlg(f'Added {timestr(self.pred_drift)} of drift to previous prediction')
                 self.sleep_period += self.pred_drift
 
         self.reset_drift()
