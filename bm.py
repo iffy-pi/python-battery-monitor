@@ -3,6 +3,8 @@ import os
 import subprocess
 import glob
 import re
+from enum import Enum
+import argparse
 
 BMTASKNAME= "BatteryMonitor"
 LOGFILEDIR='C:\\Users\\omnic\\OneDrive\\Documents\\Misc\\battery_monitor'
@@ -11,55 +13,49 @@ TASKSTATES = {
 	'ready'
 }
 
-class TaskState():
+class TaskStates(Enum):
 	none = 0
-	running = 1
-	ready = 2
-	stopped = 3
+	stopped = 1
+	running = 2
 
-	def __init__(self):
-		pass
+	def stateToStr(state):
+		# Takes a task state enum and returns a string for it=
 
-	def set_state(self, state: int):
-		self.state = state
-
-	def set_state(self, statusstr: str):
-		self.state = TaskState.state_from_status_str(statusstr)
-
-	def state_from_status_str(statusstr):
-		dix = {
-			'running': TaskState.running,
-			'ready': TaskState.ready,
-			'stopped': TaskState.stopped
+		enumstr = {
+			str(TaskStates.none) : 'Uknown',
+			str(TaskStates.running) : 'Running',
+			str(TaskStates.stopped) : 'Stopped'
 		}
 
-		
-		return dix[statusstr.lower()]
+		s = enumstr.get(str(state))
 
-	def state_to_status_str(state):
-		dix = {
-			str(TaskState.none): 'Non State',
-			str(TaskState.running) : 'Running',
-			str(TaskState.ready) : 'Ready',
-			str(TaskState.stopped) : 'Stopped'
+		if s is not None: return s
+		return enumstr.get(str(TaskStates.none))
+
+	def strToState(statusstr):
+		# takes status string returned from an schtasks query and turns it into a state
+		enumstates = {
+			'running': TaskStates.running,
+			'ready': TaskStates.stopped
 		}
-
 		
-		return dix[str(state)]
+		state = enumstates.get(statusstr.lower())
+		
+		if state is not None: return state
+		return TaskStates.none
 
-
-	def __str__(self):
-		return TaskState.state_to_status_str(self.state)
-
-
-BMTASKSTATE = TaskState()
-
-def bm_task(args: list):
+def bm_task(args: list, getoutput=False):
 	# C:\Windows\System32\schtasks.exe /run /tn "BatteryMonitor"
 	cmd = ['schtasks.exe', "/tn", BMTASKNAME]
 	cmd = cmd + args
-	child = subprocess.Popen(cmd)
-	child.communicate()
+
+	if getoutput:
+		child = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		out, err = child.communicate()
+		return out, err
+	else:
+		child = subprocess.Popen(cmd)
+		child.communicate()
 
 def get_re_matched_groups(search_str, pattern):
     res = re.search(pattern, search_str)
@@ -68,27 +64,26 @@ def get_re_matched_groups(search_str, pattern):
     else:
         return list(res.groups())
 
-
-def get_task_status():
+def get_task_state():
 	child = subprocess.Popen(f'schtasks /query /tn "{BMTASKNAME}" /v /fo list | find "Status:"', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 	out, err = child.communicate()
 	output = out.decode('utf-8')
 	res = get_re_matched_groups(output, 'Status: *(.*)')[0].strip()
-	BMTASKSTATE.set_state(res)
+	return TaskStates.strToState(res)
 
-
-def test():
-	child = subprocess.Popen(f'schtasks /query /tn "{BMTASKNAME}" /v /fo list | find "Status:"', shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-	out, err = child.communicate()
-	output = out.decode('utf-8')
-	res = get_re_matched_groups(output, 'Status: *(.*)')[0].strip()
-	BMTASKSTATE.set_state(res)
-
-def start_bm():
+def start_bm(getoutput=False):
+	if get_task_state() == TaskStates.running:
+		print('Battery Monitor Task is already running')
+		return
+	
 	print('Starting Battery Monitor task')
-	bm_task(["/run"])
+	return bm_task(["/run"], getoutput=getoutput)
 
 def stop_bm():
+	if get_task_state() == TaskStates.stopped:
+		print('Battery Monitor Task is already stopped')
+		return
+	
 	print('Stopping Battery Monitor task')
 	bm_task(["/end"])
 
@@ -97,12 +92,16 @@ def reset_bm():
 	start_bm()
 
 def bm_status():
-	get_task_status()
-	print('Status: {}'.format(BMTASKSTATE))
+	st = get_task_state()
+	print('Status: {}'.format(TaskStates.stateToStr(st)))
 
-	if BMTASKSTATE.state == TaskState.running:
+	if st == TaskStates.running:
 		print('')
 		show_latest_log(linecnt=5)
+
+def pause_bm():
+	child = subprocess.Popen(['C:\\Python310\\pythonw.exe', r'C:\\Users\\omnic\\local\\GitRepos\\python-battery-monitor\\bmsched.py', '3'], stdout=None, stderr = None)
+	print('Started!')
 
 def latest_log():
 	# get the list of files in the log directory
@@ -131,7 +130,7 @@ def show_latest_log(openlog=False, linecnt=13):
 
 
 def main():
-	args = sys.argv[1:]
+	args = [a.lower() for a in sys.argv[1:]]
 	argc = len(args)
 
 	if argc < 1:
@@ -145,16 +144,15 @@ def main():
 	}
 
 
-	if args[0].lower() in uniword_commands.keys():
-		uniword_commands[ args[0].lower() ]()
+	if args[0] in uniword_commands.keys():
+		uniword_commands[ args[0] ]()
 
 
 	elif args[0] == 'logs':
 		# no other args we default to truncating
 		# can specify a line count or use open
 
-		get_task_status()
-		if BMTASKSTATE.state != TaskState.running:
+		if get_task_state() != TaskStates.running:
 			print('Battery Monitor Task is not runnning!')
 			return 1
 
@@ -165,6 +163,9 @@ def main():
 
 		if args[1] == 'open':
 			show_latest_log(openlog=True)
+
+		elif args[1] == 'name':
+			print(latest_log())
 
 		else:
 			try:
@@ -177,9 +178,10 @@ def main():
 				print('Negative value for line count!')
 				return 1
 
-
-
 			show_latest_log(linecnt=linecnt)
+	
+	else:
+		print(f'Unrecognized argument: "{args[0]}"')
 	
 	return 0
 
