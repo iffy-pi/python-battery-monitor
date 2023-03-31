@@ -197,6 +197,15 @@ class ScriptSleepController():
     # drift is added to predict sleep period to account for time since last check and is reset in percent check
     # Assumption is that other parts of script that are not sleeping take negligible time
 
+    def log(txt):
+        OUTSTREAM.log('SLEEPCONTROLLER: {}'.format(txt))
+
+    def printlg(txt):
+        OUTSTREAM.printlg('SLEEPCONTROLLER: {}'.format(txt))
+
+    def print(txt):
+        OUTSTREAM.print('SLEEPCONTROLLER: {}'.format(txt))
+
     def track_drift(self, secs):
         self.pred_drift += secs
 
@@ -228,7 +237,7 @@ class ScriptSleepController():
         des_percent_drop = self.des_percent_drop
 
         if prev_percent is None or prev_pred is None:
-            OUTSTREAM.log(f'Initial Prediction Used, Prediction: {timestr(init_pred)}')
+            ScriptSleepController.log('Initial Prediction Used, Prediction')
             return init_pred
 
         percent_drop_per_sec = abs(cur_percent - prev_percent) / float(prev_pred)
@@ -236,7 +245,7 @@ class ScriptSleepController():
         if percent_drop_per_sec == 0.0:
             # no change in battery
             # double the prediction
-            OUTSTREAM.log('No Change, doubled the prediction.')
+            ScriptSleepController.log('No Change, doubled the prediction.')
             return prev_pred*2
 
         # calculate the actual time it would take to drop by our desired percent
@@ -265,38 +274,41 @@ class ScriptSleepController():
         use_below_thresh = (fall_below_thresh_time < pred_sleep_period) and not self.charging
         use_above_thresh = (go_above_thresh_time < pred_sleep_period) and self.charging
 
-        # OUTSTREAM.print('Above ({}) vs Predicted ({})'.format(timestr(go_above_thresh_time), timestr(pred_sleep_period)))
-        # OUTSTREAM.print('Below ({}) vs Predicted ({})'.format(timestr(fall_below_thresh_time), timestr(pred_sleep_period)))
+        # ScriptSleepController.print('Above ({}) vs Predicted ({})'.format(timestr(go_above_thresh_time), timestr(pred_sleep_period)))
+        # ScriptSleepController.print('Below ({}) vs Predicted ({})'.format(timestr(fall_below_thresh_time), timestr(pred_sleep_period)))
 
         if use_below_thresh or use_above_thresh:
             # one of these cases is true, use that as the sleep period
-            OUTSTREAM.printlg('Using Pre-emptive threshold prediction: {}'.format(
-                timestr(fall_below_thresh_time) if use_below_thresh else timestr(go_above_thresh_time),
-                ))
-
+            ScriptSleepController.printlg('Using Pre-emptive threshold prediction')
             return fall_below_thresh_time if use_below_thresh else go_above_thresh_time
 
 
         # none of them match, just use same sleep period
-        OUTSTREAM.printlg(f'Using standard prediction: {timestr(int(pred_sleep_period))}')
+        ScriptSleepController.printlg('Using standard prediction')
         return pred_sleep_period
 
-    def sleep(self):
+    def sleep_till_next_check(self):
         self.prev_percent = self.cur_percent
         self.cur_percent, self.charging = get_battery_info()
-
+        
         # does the required sleep
         if self.sleep_period is not None:
             if self.pred_drift > 0:
-                OUTSTREAM.printlg(f'Added {timestr(self.pred_drift)} of drift to previous prediction')
+                ScriptSleepController.printlg(f'Added {timestr(self.pred_drift)} of drift to previous prediction')
                 self.sleep_period += self.pred_drift
 
         self.reset_drift()
 
+        ScriptSleepController.log(f'Previous Percent: {self.prev_percent}')
+        ScriptSleepController.log(f'Curent Percent: {self.cur_percent}')
+        ScriptSleepController.log(f'Charging: {self.charging}')
+        ScriptSleepController.log(f'Previous Sleep Period: {0 if self.sleep_period is None else self.sleep_period}s or {timestr(self.sleep_period) if self.sleep_period is not None else 0}')
+
         self.sleep_period = self.get_sleep_period()
 
         #sleeping the sleep period
-        OUTSTREAM.printlg(f'Sleeping {timestr(self.sleep_period)}...')
+        ScriptSleepController.log(f'New Prediction: {self.sleep_period}s or {timestr(self.sleep_period)}')
+        ScriptSleepController.printlg(f'Sleeping {timestr(self.sleep_period)}...')
         verbose_sleep( secs=self.sleep_period )
 
 
@@ -393,7 +405,7 @@ class ScriptStdOut():
 
 def do_beeps():
     # use winsound to generate beeps
-    for _ in range(3):
+    for _ in range(1):
         beep(750, 1000)
 
 def do_beeps_threaded():
@@ -534,7 +546,7 @@ def monitor_battery():
 
             # put sleep first, doing so to eliminate if statements
             if itr > 0:
-                SLEEP_CONTROLLER.sleep()
+                SLEEP_CONTROLLER.sleep_till_next_check()
 
 
             # get the battery percentage
@@ -671,15 +683,15 @@ def main():
 
 
         parser.add_argument(
-            '--no-logs',
-            '--no-logs',
+            '--nologs',
+            '--nologs',
             action='store_true',
             help='Disable logs'
         )
 
         parser.add_argument(
-            '--print-logs',
-            '--print-logs',
+            '--printlogs',
+            '--printlogs',
             action='store_true',
             help='print all log messages to the console'
         )
@@ -706,7 +718,7 @@ def main():
         MAX_ATTEMPTS = options.max_attempts
         HEADLESS = options.headless
 
-        OUTSTREAM.setConfig(logfileaddr=LOG_FILE_ADDR, enablelogs=(not (options.testing or options.no_logs)), headless=options.headless, printlogs=options.print_logs)
+        OUTSTREAM.setConfig(logfileaddr=LOG_FILE_ADDR, enablelogs=(not (options.testing or options.nologs)), headless=options.headless, printlogs=options.printlogs)
 
         if OUTSTREAM.enablelogs:
             OUTSTREAM.print('Logging To: {}\n'.format(LOG_FILE_ADDR))
