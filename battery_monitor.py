@@ -1,29 +1,26 @@
+# Pre-installed Packages
 import os
 import sys
 import traceback
-
-import psutil # get battery information
-import argparse # command line arguments
 import re
-
-#dateitme
 from datetime import datetime as mydt
-import time       # importing for getting time
-
+import time
 # email packages
-import keyring
 import smtplib
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import COMMASPACE
 from email import encoders
-
-# Windows notifications
-from winotify import Notification
-from winsound import Beep as beep
 import threading
+from winsound import Beep as beep
 
+# External packages
+import psutil # get battery information 
+import argparse # command line arguments
+from winotify import Notification # Windows notifications
+
+# Local files
 script_loc_dir = os.path.split(os.path.realpath(__file__))[0]
 if script_loc_dir not in sys.path:  sys.path.append(script_loc_dir)
 from SmartPlugController import SmartPlugController
@@ -34,9 +31,6 @@ from privateconfig import *
 
 # Icon used for windows10 notification
 WIN_NOTIF_ICON = os.path.join(script_loc_dir, 'roboticon.png')
-
-
-
 LOG_FILE_ADDR = os.path.join( LOG_FILES_DIR, 'status_{}_{}.log'.format(mydt.today().strftime('%H%M_%d_%m_%Y'), int(time.time())))
 
 def send_email_from_bot(text, subject, mainRecipient, recipients, files=[], important=False, content="text", verbose=False):
@@ -741,6 +735,7 @@ def main():
         OUTSTREAM.print(f'Alert Period: {options.alert}')
         OUTSTREAM.print(f'Max Alert Attempts: {MAX_ATTEMPTS}')
         OUTSTREAM.print('')
+        OUTSTREAM.flushToFile()
 
         if HEADLESS: started_notif()
 
