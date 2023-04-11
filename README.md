@@ -22,7 +22,11 @@ bm.py is a command line utility to quickly check the status of the battery monit
 2. TP Link Command Line Utility (https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca&rtc=1)
 
 ## Required Python Packages
-See requirements.txt
+The required python packages are listed in requirements.txt. They can be installed using the command:
+
+```
+pip install -r requirements.txt
+```
 
 # Script Usage
 ## Pre-Configuration
