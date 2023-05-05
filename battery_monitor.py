@@ -4,6 +4,7 @@ import sys
 import traceback
 import re
 from datetime import datetime as mydt
+from datetime import timedelta
 import time
 # email packages
 import smtplib
@@ -90,48 +91,89 @@ def send_email_from_bot(text, subject, mainRecipient, recipients, files=[], impo
     if verbose: OUTSTREAM.print('Sent')
     session.quit()
 
-def get_re_matched_groups(search_str, pattern):
-    res = re.search(pattern, search_str)
-    if res is None:
-        return []
-    else:
-        return list(res.groups())
-
-def parse_time_str_to_seconds(time_str):
-    groups = get_re_matched_groups(time_str, "([0-9]*[hH])* *([0-9]*[mM])* *([0-9]*[sS])*")
-    if len(groups) != 3:
-        raise Exception('Could not parse time string: {}'.format(time_str))
-
-    for i in range(0, 3):
-        if groups[i]:
-            groups[i] = int( groups[i].lower().replace('h','').replace('m', '').replace('s', '') )
-        else:
-            groups[i] = 0
-
-    #calculate seconds
-    seconds = (groups[0]*3600) + (groups[1]*60) + groups[2]
-    return seconds
-
-def timestr(seconds_in):
-    #takes in string of execution time and turns it into a string
-    exec_hrs = int(seconds_in / 3600) #how many hours did it take
-    exec_mins = int((seconds_in % 3600) / 60) # the amount of seconds left outside the hours, divided by 60 to get minutes
-    exec_secs = int((seconds_in % 3600) % 60) # the amount of seconds left outside the minutes
-
-    time_str = ''
-    if exec_secs > 0:
-        time_str = str(exec_secs)+' secs'
-    if exec_mins > 0:
-        time_str = str(exec_mins)+' mins '+time_str
-    if exec_hrs > 0:
-        time_str = str(exec_hrs)+' hrs '+time_str
-
-    return time_str
-
 def get_battery_info():
     battery = psutil.sensors_battery() 
     return battery.percent, battery.power_plugged
 
+class TimeString():
+    '''
+    Time strings can be of the format "1h 2m 3s" or "2m 3s" or "1s" (case insensitive)
+    Can also use full names, like mins, secs, and hours
+    Class provides functionality to parse and create such time strings
+    '''
+
+    '''
+    Parse a time string into seconds
+    '''
+    def parse(timestr: str) -> int:
+        # parse a timestring into integer seconds
+        possible_formats = [
+            "([0-9][0-9]* *hour[s]*)* *([0-9][0-9]* *min[s]*)* *([0-9][0-9]* *sec[s]*)*",
+            "([0-9][0-9]* *hr[s]*)* *([0-9][0-9]* *min[s]*)* *([0-9][0-9]* *sec[s]*)*",
+            "([0-9][0-9]* *h)* *([0-9][0-9]* *m)* *([0-9][0-9]* *s)*",
+        ]
+
+        timestr = timestr.lower()
+
+        groups = None
+        for frmt in possible_formats:
+            res = re.search(frmt, timestr)
+            if (res is not None) and (len(res.groups()) == 3) and (any(g is not None for g in  res.groups())):
+                print('Matched: '+frmt)
+                groups = list(res.groups())
+                break
+
+        if groups is None:
+            raise Exception('Could not parse time string: {}'.format(time_str))
+
+
+        for i in range(0, 3):
+            if groups[i]:
+                digit_str = ''
+
+                # remove the letters
+                for j in range(len(groups)):
+                    if not groups[i][j].isdigit():
+                        break
+                    digit_str += groups[i][j]
+
+                groups[i] = int(digit_str)
+            else:
+                groups[i] = 0
+
+        #calculate seconds
+        seconds = (groups[0]*3600) + (groups[1]*60) + groups[2]
+        return seconds
+
+    '''
+    Make time string from seconds input
+    '''
+    def make(seconds: int) -> str:
+        #takes in string of execution time and turns it into a string
+        _hrs = int(seconds / 3600) #how many hours did it take
+        _mins = int((seconds % 3600) / 60) # the amount of seconds left outside the hours, divided by 60 to get minutes
+        _secs = int((seconds % 3600) % 60) # the amount of seconds left outside the minutes
+
+        timestr = ''
+
+        info = ( (_secs, 'sec'), (_mins, 'min'), (_hrs, 'hr') )
+
+        for pair in info:
+            val, unit = pair
+            if val > 0:
+                timestr = '{} {}'.format('{} {}{}'.format(val, unit, 's' if val > 1 else ''), timestr)
+        
+        return timestr.strip()
+
+    def makeDelta(seconds: int) -> str:
+        secs = seconds
+        a_day = 86400 # the amount of seconds in a day
+        days = int(secs/a_day)
+        secs = secs % a_day
+        td = str(timedelta(seconds=secs)).split(':')
+
+        td[0] = str( int(td[0]) + days*24) # add the days back as hours
+        return ':'.join(td)
 
 class ScriptSleepController():
     # controller used to manage script sleeping
@@ -171,6 +213,16 @@ class ScriptSleepController():
         self.pred_drift = 0
 
     def sleep(secs=0, mins=0, hours=0, verbose=True):
+
+        def makecolontime(secs):
+            a_day = 86400 # the amount of seconds in a day
+            days = int(secs/a_day)
+            secs = secs % a_day
+            td = str(timedelta(seconds=secs)).split(':')
+
+            td[0] = str( int(td[0]) + days*24) # add the days back as hours
+            return ':'.join(td)
+
         # convert time to only seconds
         secs = secs + (mins*60) + (hours*3600)
         if secs == 0: return
@@ -183,18 +235,24 @@ class ScriptSleepController():
             time.sleep(secs)
             return
 
+        # using timedelta
+        max_width = len(makecolontime(secs))
+
         # use max number of digits to create the message format
         # for example can be {:<4d} if secs is between 1000 and 9999, handles formatting the spacing for us
-        max_num_digits = int(math.log10(secs))+1
-        msg_format = "{:<" + str(max_num_digits) + "d} seconds remaining..."
+        msg_format = "Sleeping... " + "{:<" + str(max_width) + "s}"
+
+        # old version was
+        # max_width = int(math.log10(secs))+1
+        # msg_format = "{:<" + str(max_width) + "d} seconds remaining..."
         
-        # the length of each message, 21 characters is for " seconds remaining..."
-        msg_len = max_num_digits + 21
+        # the length of each message, 21 characters is for "Countdown: "
+        msg_len = max_width + 12
 
         for remaining in range(secs, 0, -1):
             # write the remaining time using the format
             # carriage return moves us to the beginning of the line
-            sys.stdout.write("\r" + msg_format.format(remaining))
+            sys.stdout.write("\r" + msg_format.format(makecolontime(remaining)))
             sys.stdout.flush() # flush to the console or log file
             time.sleep(1) # sleep the one seconds
 
@@ -203,7 +261,7 @@ class ScriptSleepController():
         finish_msg = finish_msg_format.format('Done!')
         sys.stdout.write("\r{}\n".format(finish_msg))
 
-    def track_sleep(self, secs:int):
+    def tracked_sleep(self, secs:int):
         # used by other parts of the script that need to use sleep
         # outside the sleeps till next check
         # adds that as drift in our sleep prediction and then uses verbose sleep
@@ -267,8 +325,8 @@ class ScriptSleepController():
         use_below_thresh = (fall_below_thresh_time < pred_sleep_period) and not self.charging
         use_above_thresh = (go_above_thresh_time < pred_sleep_period) and self.charging
 
-        # ScriptSleepController.print('Above ({}) vs Predicted ({})'.format(timestr(go_above_thresh_time), timestr(pred_sleep_period)))
-        # ScriptSleepController.print('Below ({}) vs Predicted ({})'.format(timestr(fall_below_thresh_time), timestr(pred_sleep_period)))
+        # ScriptSleepController.print('Above ({}) vs Predicted ({})'.format(TimeString.make(go_above_thresh_time), TimeString.make(pred_sleep_period)))
+        # ScriptSleepController.print('Below ({}) vs Predicted ({})'.format(TimeString.make(fall_below_thresh_time), TimeString.make(pred_sleep_period)))
 
         if use_below_thresh or use_above_thresh:
             # one of these cases is true, use that as the sleep period
@@ -287,7 +345,7 @@ class ScriptSleepController():
         # does the required sleep
         if self.sleep_period is not None:
             if self.pred_drift > 0:
-                ScriptSleepController.printlg(f'Added {timestr(self.pred_drift)} of drift to previous prediction')
+                ScriptSleepController.printlg(f'Added {TimeString.make(self.pred_drift)} of drift to previous prediction')
                 self.sleep_period += self.pred_drift
 
         self.reset_drift()
@@ -296,13 +354,13 @@ class ScriptSleepController():
         # ScriptSleepController.log(f'Curent Percent: {self.cur_percent}')
         # ScriptSleepController.log(f'Charging: {self.charging}')
         
-        ScriptSleepController.printlg(f'Previous Sleep Period: {timestr(self.sleep_period) if self.sleep_period is not None else 0}')
+        ScriptSleepController.printlg(f'Previous Sleep Period: {TimeString.make(self.sleep_period) if self.sleep_period is not None else 0}')
 
         self.sleep_period = self.get_sleep_period()
 
         #sleeping the sleep period
-        # ScriptSleepController.log(f'New Prediction: {self.sleep_period}s or {timestr(self.sleep_period)}')
-        ScriptSleepController.printlg(f'Sleeping {timestr(self.sleep_period)}...')
+        # ScriptSleepController.log(f'New Prediction: {self.sleep_period}s or {TimeString.make(self.sleep_period)}')
+        ScriptSleepController.printlg(f'Sleeping {TimeString.make(self.sleep_period)}...')
         ScriptSleepController.sleep( secs=self.sleep_period )
 
 
@@ -483,7 +541,7 @@ def handle_battery_case(high_battery, low_battery):
 
         OUTSTREAM.print('Waiting 5 seconds for verification')
 
-        SLEEP_CONTROLLER.track_sleep(5)
+        SLEEP_CONTROLLER.tracked_sleep(5)
 
         _ , charging = get_battery_info()
 
@@ -521,8 +579,8 @@ def handle_battery_case(high_battery, low_battery):
 
         attempts_made += 1
         
-        OUTSTREAM.printlg(f'Waiting {timestr(wait_for)} for user action...')
-        SLEEP_CONTROLLER.track_sleep(wait_for)
+        OUTSTREAM.printlg(f'Waiting {TimeString.make(wait_for)} for user action...')
+        SLEEP_CONTROLLER.tracked_sleep(wait_for)
 
         # get the charging info again and reloop
         _ , charging = get_battery_info()
@@ -571,7 +629,7 @@ def monitor_battery():
                 try:
 
                     OUTSTREAM.print('\nPress Ctrl+C again in 10s to end script')
-                    SLEEP_CONTROLLER.track_sleep(secs=10)
+                    SLEEP_CONTROLLER.tracked_sleep(secs=10)
                     itr = 0
                 except KeyboardInterrupt:
                     OUTSTREAM.printlg('While loop exited from keyboard interrupt')
@@ -581,7 +639,40 @@ def started_notif():
     send_notification('Headless Battery Monitor', 'Battery monitor started successfully and running in headless mode. Log file: {}'.format(os.path.split(LOG_FILE_ADDR)[1]))  
 
 def testing():
-    ScriptSleepController.sleep(10)
+    # tests = [
+    #     '3h2m3s',
+    #     '3h 2m 3s',
+    #     '3hrs 2mins 3secs',
+    #     '3hrs2mins3secs',
+    #     '3hours 2mins 3secs',
+    #     '3hours2mins3secs',
+    #     '1hr1min1sec',
+    #     '1hour1min1sec',
+    #     '2mins 3secs',
+    #     '1 min 3 sec'
+    # ]
+
+    # for timestr in tests:
+    #     print('Timestring: '+timestr)
+
+    #     try:
+    #         secs = TimeString.parse(timestr)
+    #         print('Seconds = {}'.format(secs))
+    #     except:
+    #         print('Could not parse timestring')
+    #         continue
+
+    #     try:
+    #         print(TimeString.make(secs))
+    #     except Exception as e:
+    #         print('Error')
+    #         traceback.print_exc()
+    #         sys.exit(0)
+
+    #     print('==========================')
+
+    ScriptSleepController.sleep(29309)
+    
 
 
 def main():
@@ -596,7 +687,7 @@ def main():
     global SLEEP_CONTROLLER
 
     OUTSTREAM = ScriptOutputStream.getInstance(logfileaddr=LOG_FILE_ADDR, enablelogs=False, headless=False, printlogs=False)
-
+    HEADLESS = False
     try:
         parser = argparse.ArgumentParser()
 
@@ -703,7 +794,7 @@ def main():
 
         options = parser.parse_args()
 
-        ALERT_PERIOD = parse_time_str_to_seconds( options.alert )
+        ALERT_PERIOD = 300 #TimeString.parse( options.alert )
         BATTERY_FLOOR = options.min
         BATTERY_CEILING = options.max
         MAX_ATTEMPTS = options.max_attempts
