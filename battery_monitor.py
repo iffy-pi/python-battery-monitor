@@ -90,43 +90,6 @@ def send_email_from_bot(text, subject, mainRecipient, recipients, files=[], impo
     if verbose: OUTSTREAM.print('Sent')
     session.quit()
 
-def verbose_sleep(secs=None, mins=None, hours=None):
-
-    if not secs:
-        secs = 0
-
-    if mins: secs += mins*60
-
-    if hours: secs += hours*3600
-
-    OUTSTREAM.flushToFile()
-
-    if HEADLESS:
-        time.sleep(secs)
-        return
-
-    prev_str_len = -1
-    for remaining in range(secs, 0, -1):
-        sys.stdout.write("\r")
-
-        info_str = "{:d} seconds remaining...".format(remaining)
-        cur_str_len = len(info_str)
-
-        while len(info_str) < prev_str_len:
-            info_str += ' '
-
-        prev_str_len = len(info_str)
-
-        sys.stdout.write(info_str)
-        sys.stdout.flush()
-        time.sleep(1)
-
-    finish_msg = 'Done!'
-
-    while len(finish_msg) < prev_str_len:
-        finish_msg += ' '
-    sys.stdout.write("\r{}\n".format(finish_msg))
-
 def get_re_matched_groups(search_str, pattern):
     res = re.search(pattern, search_str)
     if res is None:
@@ -207,12 +170,45 @@ class ScriptSleepController():
     def reset_drift(self):
         self.pred_drift = 0
 
+    def sleep(secs=0, mins=0, hours=0, verbose=True):
+        # convert time to only seconds
+        secs = secs + (mins*60) + (hours*3600)
+        if secs == 0: return
+
+        # flush stdout to file if we are using a log file
+        # that way log files contain most recent data before sleep
+        OUTSTREAM.flushToFile()
+
+        if HEADLESS or not verbose:
+            time.sleep(secs)
+            return
+
+        # use max number of digits to create the message format
+        # for example can be {:<4d} if secs is between 1000 and 9999, handles formatting the spacing for us
+        max_num_digits = int(math.log10(secs))+1
+        msg_format = "{:<" + str(max_num_digits) + "d} seconds remaining..."
+        
+        # the length of each message, 21 characters is for " seconds remaining..."
+        msg_len = max_num_digits + 21
+
+        for remaining in range(secs, 0, -1):
+            # write the remaining time using the format
+            # carriage return moves us to the beginning of the line
+            sys.stdout.write("\r" + msg_format.format(remaining))
+            sys.stdout.flush() # flush to the console or log file
+            time.sleep(1) # sleep the one seconds
+
+        # finish message must overwrite line completely, so use formatting to give required number of spaces
+        finish_msg_format = "{:<"+str(msg_len)+"s}"
+        finish_msg = finish_msg_format.format('Done!')
+        sys.stdout.write("\r{}\n".format(finish_msg))
+
     def track_sleep(self, secs:int):
         # used by other parts of the script that need to use sleep
         # outside the sleeps till next check
         # adds that as drift in our sleep prediction and then uses verbose sleep
         self.track_drift(secs)
-        verbose_sleep(secs=secs)
+        ScriptSleepController.sleep(secs=secs)
 
     def predict_sleep_period(self):
         # predicts the amount of time to sleep so that we check the battery every (des_percent_drop)%
@@ -307,7 +303,7 @@ class ScriptSleepController():
         #sleeping the sleep period
         # ScriptSleepController.log(f'New Prediction: {self.sleep_period}s or {timestr(self.sleep_period)}')
         ScriptSleepController.printlg(f'Sleeping {timestr(self.sleep_period)}...')
-        verbose_sleep( secs=self.sleep_period )
+        ScriptSleepController.sleep( secs=self.sleep_period )
 
 
 class ScriptOutputStream():
