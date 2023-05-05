@@ -14,6 +14,7 @@ from email.utils import COMMASPACE
 from email import encoders
 import threading
 from winsound import Beep as beep
+import math
 
 # External packages
 import psutil # get battery information 
@@ -207,7 +208,9 @@ class ScriptSleepController():
         self.pred_drift = 0
 
     def track_sleep(self, secs:int):
-        # increments time sincle last slepts and calls verbose sleep
+        # used by other parts of the script that need to use sleep
+        # outside the sleeps till next check
+        # adds that as drift in our sleep prediction and then uses verbose sleep
         self.track_drift(secs)
         verbose_sleep(secs=secs)
 
@@ -293,20 +296,21 @@ class ScriptSleepController():
 
         self.reset_drift()
 
-        ScriptSleepController.log(f'Previous Percent: {self.prev_percent}')
-        ScriptSleepController.log(f'Curent Percent: {self.cur_percent}')
-        ScriptSleepController.log(f'Charging: {self.charging}')
-        ScriptSleepController.log(f'Previous Sleep Period: {0 if self.sleep_period is None else self.sleep_period}s or {timestr(self.sleep_period) if self.sleep_period is not None else 0}')
+        # ScriptSleepController.log(f'Previous Percent: {self.prev_percent}')
+        # ScriptSleepController.log(f'Curent Percent: {self.cur_percent}')
+        # ScriptSleepController.log(f'Charging: {self.charging}')
+        
+        ScriptSleepController.printlg(f'Previous Sleep Period: {timestr(self.sleep_period) if self.sleep_period is not None else 0}')
 
         self.sleep_period = self.get_sleep_period()
 
         #sleeping the sleep period
-        ScriptSleepController.log(f'New Prediction: {self.sleep_period}s or {timestr(self.sleep_period)}')
+        # ScriptSleepController.log(f'New Prediction: {self.sleep_period}s or {timestr(self.sleep_period)}')
         ScriptSleepController.printlg(f'Sleeping {timestr(self.sleep_period)}...')
         verbose_sleep( secs=self.sleep_period )
 
 
-class ScriptStdOut():
+class ScriptOutputStream():
     instance = None
 
     def __init__(self, logfileaddr, enablelogs, headless, printlogs):
@@ -341,10 +345,10 @@ class ScriptStdOut():
                 raise Exception('Cannot be headless without log file!')
             
     def getInstance(logfileaddr=None, enablelogs=False, headless=False, printlogs=False):
-        if ScriptStdOut.instance is None:
-            ScriptStdOut.instance = ScriptStdOut(logfileaddr, enablelogs, headless, printlogs)
+        if ScriptOutputStream.instance is None:
+            ScriptOutputStream.instance = ScriptOutputStream(logfileaddr, enablelogs, headless, printlogs)
 
-        return ScriptStdOut.instance
+        return ScriptOutputStream.instance
 
     def flushToFile(self):
         # flushes logfile object to file
@@ -581,10 +585,7 @@ def started_notif():
     send_notification('Headless Battery Monitor', 'Battery monitor started successfully and running in headless mode. Log file: {}'.format(os.path.split(LOG_FILE_ADDR)[1]))  
 
 def testing():
-    print('Running!')
-    x = threading.Thread(target=do_beeps)
-    x.start()
-    print('Done!')
+    ScriptSleepController.sleep(10)
 
 
 def main():
@@ -598,7 +599,7 @@ def main():
     global SMART_PLUG_CONTROLLER
     global SLEEP_CONTROLLER
 
-    OUTSTREAM = ScriptStdOut.getInstance(logfileaddr=LOG_FILE_ADDR, enablelogs=False, headless=False, printlogs=False)
+    OUTSTREAM = ScriptOutputStream.getInstance(logfileaddr=LOG_FILE_ADDR, enablelogs=False, headless=False, printlogs=False)
 
     try:
         parser = argparse.ArgumentParser()
