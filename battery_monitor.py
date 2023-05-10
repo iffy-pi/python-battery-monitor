@@ -137,15 +137,27 @@ def get_battery_info():
 
 class TimeString():
     '''
-    Time strings can be of the format "1h 2m 3s" or "2m 3s" or "1s" (case insensitive)
-    Can also use full names, like mins, secs, and hours
+    Used to make or parse "TimeStrings", which are simple strings that represent a given amount of time.
     Class provides functionality to parse and create such time strings
+
+    Example TimeStrings are shown below:
+    | Time String Argument	| Represented Amount of Time 			|
+    | :---      			|    :---     							|
+    | `30s` 				| 30 seconds 							|
+    | `1m` 					| 1 minute 								|
+    | `3h` 					| 3 hours 								|
+    | `1m 25s` 				| 1 minute and 25 seconds 				|
+    | `3h30s` 				| 3 hours and 30 seconds 				|
+    | `3h 3m` 				| 3 hours and 3 minutes 				|
+    | `2h30m16s` 			| 2 hours, 30 minutes and 16 seconds 	|
+
+    Can also use full names, like mins, secs, and hours e.g. "2hrs 3mins 2secs" or "2hours 3mins 2secs"
     '''
 
-    '''
-    Parse a time string into seconds
-    '''
     def parse(timestr: str) -> int:
+        '''
+        Parse a time string into seconds
+        '''
         # parse a timestring into integer seconds
         possible_formats = [
             "([0-9][0-9]* *hour[s]*)* *([0-9][0-9]* *min[s]*)* *([0-9][0-9]* *sec[s]*)*",
@@ -185,10 +197,11 @@ class TimeString():
         seconds = (groups[0]*3600) + (groups[1]*60) + groups[2]
         return seconds
 
-    '''
-    Make time string from seconds input
-    '''
+    
     def make(seconds: int) -> str:
+        '''
+        Make time string from seconds input
+        '''
         #takes in string of execution time and turns it into a string
         _hrs = int(seconds / 3600) #how many hours did it take
         _mins = int((seconds % 3600) / 60) # the amount of seconds left outside the hours, divided by 60 to get minutes
