@@ -11,25 +11,48 @@ class SPCSubprocessException(Exception):
         super().__init__(self.message)
 
 class SmartPlugController():
-    LATENCY = 1.3
-    def __init__( self, plug_ip:str, plug_name:str, home_network_name:str, tplink_creds:tuple=None, logging=True, printlogs=False):
+    def __init__( self, 
+                 plug_ip:str, 
+                 plug_name:str, 
+                 home_network_name:str, 
+                 tplink_creds:tuple=None, 
+                 logging=True, 
+                 printlogs=False):
+        '''
+        Initialize a SmartPlug Controller, takes:
+
+        `plug_ip` : IP Address of smart plug.
+
+        `plug_name` : Name of the smart plug.
+
+        `home_network_name` : Name of your home network.
+
+        `tplink_creds`: TP Link Account credentials in the form of tuple: `(username, password)`
+
+        `logging` : If controller will be performing logs.
+
+        `printlogs` : Print logs as they are generated.
+        '''
+        
         self.plug_ip = plug_ip
         self.plug_name = plug_name
         self.home_network = home_network_name
-        self.cloud_creds = tplink_creds
+        self.tplink_creds = tplink_creds
         self.logs = []
         self.logging = logging
         self.printlogs = printlogs
+
         # set the event loop policy on initialization
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     def log(self, text):
+        if not self.logging: return
         # handles logging if present
         t = time.time()
         if self.printlogs:
             print('{}: {}'.format(t, text))
-        if self.logging:
-            self.logs.append('{}: {}'.format(t, text))
+        
+        self.logs.append('{}: {}'.format(t, text))
 
     # Print and log
     def printlg(self, text):
@@ -40,9 +63,9 @@ class SmartPlugController():
         self.logs = []
 
     def dump_logs(self):
-        llogs = list(self.logs)
+        _logs = list(self.logs)
         self.clear_logs()
-        return llogs
+        return _logs
     
     def print_logs(self):
         for l in self.dump_logs():
@@ -59,7 +82,10 @@ class SmartPlugController():
 
         return out, err
 
-    def on_home_network(self):
+    def on_home_network(self) -> bool:
+        '''
+        Returns true if the calling device (laptop) is on the home network, i.e. network with name `self.home_network`.
+        '''
         if self.home_network == '':
             raise Exception('No home network provided!')
 
@@ -100,18 +126,23 @@ class SmartPlugController():
         
         return ( connected and network == self.home_network )
 
-    def run_tplinkcmd(self, cmdargs: list):
+    def run_tplinkcmd(self, cmdargs: list) -> None:
+        '''
+        Runs TPLInkCmd.exe with the arguments in `cmdargs`.
+
+        First runs TPLinkCmd.exe log in command with `self.tplink_creds`, then runs TPLinkCmd with specified arguments.
+        '''
         # cmargs is args to the tplinkcmd.exe
 
         # uses TPLinkCmd.exe 
         # TPLinkCmd is provided on windows store
         # https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca
 
-        if self.cloud_creds is None: 
+        if self.tplink_creds is None: 
             self.log('No credentials provided')
             return
 
-        username, password = self.cloud_creds
+        username, password = self.tplink_creds
         if username is None or password is None:
             raise Exception('No username and password information!')
         
@@ -126,7 +157,10 @@ class SmartPlugController():
         for line in output.split('\n'):
             self.log(line.strip())
     
-    def set_plug_via_cloud(self, on=False, off=False):
+    def set_plug_via_tplink(self, on=False, off=False) -> None:
+        '''
+        Sets plug on or off using TPLinkCmd.exe
+        '''
         self.run_tplinkcmd(['-device', self.plug_name, '-on' if on else '-off'])
         time.sleep(2)
 
@@ -134,31 +168,60 @@ class SmartPlugController():
         hours = int(secs / 3600)
         mins = int((secs % 3600) / 60)
 
-        self.run_tplinkcmd(['-device', self.plug_name, '-timer', 'start', '-h', hours, '-m', mins, '-action', '1' if on else '0'])
+        self.run_tplinkcmd([
+            '-device', self.plug_name,
+            '-timer', 'start', 
+            '-h', hours, '-m', mins,
+            '-action', '1' if on else '0'])
         self.log('Started Timer for  {} hours and {} mins'.format(hours, mins))
 
-    async def set_plug_via_python(self, on=False, off=False):
+    async def set_plug_with_pykasa(self, on=False, off=False) -> None:
+        '''
+        Sets the plug to the desired on or off using the python Kasa module.
+        '''
         plug = SmartPlug(self.plug_ip)
         if on: await plug.turn_on()
         else: await plug.turn_off()
 
-    async def __is_plug_on_p(self):
+    async def __is_plug_on(self) -> bool:
         plug = SmartPlug(self.plug_ip)
         await plug.update()  # Request the update
         return plug.is_on
     
-    def is_plug_on(self):
-        return asyncio.run(self.__is_plug_on_p())
+    def is_plug_on(self) -> bool:
+        '''
+        Checks if the plug is on.
+        '''
+        return asyncio.run(self.__is_plug_on())
 
-    def __plug_set(self, on, off):
+    def __plug_set(self, on: bool, off: bool) -> bool:
+        '''
+        Checks if the plug was already set to the desired value i.e. if the plug is already on or off.
+        Returns true if:
+            
+            plug is on, and `on` is true, 
+            
+            or plug is off and `off` is true.
+        '''
         try:
             plug_on = self.is_plug_on()
             return (on and plug_on) or ( off and not plug_on)
         except SmartDeviceException:
             self.log('Plug check failed!')
             return None
+        
+    def set_plug(self, on=False, off=False, use_pykasa=True, use_tplink=True) -> int:
+        '''
+        Sets the smart plug on or off.
 
-    def set_plug(self, on=False, off=False, use_python=True, use_cloud=True):
+        `use_pykasa` : Allowed to use the python Kasa module
+
+        `use_tplink` : Allowed to use TPLinkCmd.exe
+
+        Attempts to set the plug first using the Kasa module (if allowed), if not successful, TPLinkCmd.exe is used (if allowed).
+
+        Returns 0 if the request was successful or plug was already set, -1 if the plug could not be set, and -2 if not on the home network.
+        '''
         if not (on or off):
             raise Exception('No plug control was set!')
         
@@ -172,13 +235,11 @@ class SmartPlugController():
             self.log('Plug was already set')
             return 0
         
-        if use_python:
+        if use_pykasa:
             # python control first
             try:
                 self.log('Setting plug via python')
-                asyncio.run(self.set_plug_via_python(on=on, off=off))
-                time.sleep(self.LATENCY)
-            
+                asyncio.run(self.set_plug_with_pykasa(on=on, off=off))
             except SmartDeviceException as e:
                 self.log(f'Python Control Failed: {e}')
         
@@ -186,11 +247,11 @@ class SmartPlugController():
             # check if it worked and return if it did
             if self.__plug_set(on, off): return 0
 
-        if use_cloud:
+        if use_tplink:
             # otherwise try the cloud
             self.log('Setting plug via cloud')
             try:
-                self.set_plug_via_cloud(on=on, off=off)
+                self.set_plug_via_tplink(on=on, off=off)
             
             except KeyboardInterrupt:
                 raise KeyboardInterrupt

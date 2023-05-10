@@ -5,13 +5,13 @@ import os
 script_loc_dir = os.path.split(os.path.realpath(__file__))[0]
 if script_loc_dir not in sys.path:  sys.path.append(script_loc_dir)
 from SmartPlugController import SmartPlugController
-from private.config import ARGS_CONFIG
+from private.config import CONFIG
 
 def main():
     plc = SmartPlugController(
-        ARGS_CONFIG['plug_ip'], 
-        ARGS_CONFIG['plug_name'], 
-        ARGS_CONFIG['home_wifi'],
+        CONFIG['args']['plug_ip'], 
+        CONFIG['args']['plug_name'], 
+        CONFIG['args']['home_wifi'],
         None)
 
     res = plc.set_plug(off=True)

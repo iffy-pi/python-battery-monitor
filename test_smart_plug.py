@@ -17,8 +17,8 @@ def main():
         return 1
 
     plug_on = (plug_state == 'on')
-    use_cloud = not ( '--no-cloud' in args )
-    use_python = not ( '--no-python' in args)
+    use_tplinkcmd = not ( '--no-tplink' in args )
+    use_pykasa = not ( '--no-pykasa' in args)
 
     plc= SmartPlugController(
         plug_ip, 
@@ -30,13 +30,12 @@ def main():
     print("Setting Kasa SmartPlug '{}' to '{}'".format(plug_ip, plug_state))
 
     s = None
-    if use_python: s = '{}, {}'.format(s, 'Python') if s is not None else 'Python'
-    if use_cloud: s = '{}, {}'.format(s, 'TPLinkCmd.exe') if s is not None else 'TPLinkCmd.exe'
+    if use_pykasa: s = '{}, {}'.format(s, 'Python') if s is not None else 'Python'
+    if use_tplinkcmd: s = '{}, {}'.format(s, 'TPLinkCmd.exe') if s is not None else 'TPLinkCmd.exe'
 
     print('Can use: {}'.format(s))
 
-
-    plc.set_plug(on=plug_on, off=(not plug_on), use_cloud=use_cloud, use_python=use_python)
+    plc.set_plug(on=plug_on, off=(not plug_on), use_tplink=use_tplinkcmd, use_pykasa=use_pykasa)
 
 
     return 0
