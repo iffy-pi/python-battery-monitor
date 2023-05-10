@@ -4,21 +4,13 @@ import os
 script_loc_dir = os.path.split(os.path.realpath(__file__))[0]
 if script_loc_dir not in sys.path:  sys.path.append(script_loc_dir)
 from SmartPlugController import SmartPlugController
-
-privlocdir = os.path.join(script_loc_dir, 'private')
-if privlocdir not in sys.path:  sys.path.append(privlocdir)
-from privateconfig import TPLINK_CLOUD_CREDS
+from private.config import CONFIG
 
 def main():
     args = sys.argv[1:]
 
-    if len(args) < 2:
-        print('Expecting arguments: <plug ip address> <plug state>')
-        return 1
-
-    plug_ip = args[0]
-
-    plug_state = args[1]
+    plug_ip = CONFIG['args']['plug_ip']
+    plug_state = args[0]
 
     if plug_state not in [ 'on', 'off' ]:
         print('Plug state must either be "on" or "off"')
@@ -27,8 +19,13 @@ def main():
     plug_on = (plug_state == 'on')
     use_cloud = not ( '--no-cloud' in args )
     use_python = not ( '--no-python' in args)
-    
-    plc = SmartPlugController(plug_ip, 'Ajak Smart Plug', 'JIR', tplink_creds=TPLINK_CLOUD_CREDS, printlogs=True)
+
+    plc= SmartPlugController(
+        plug_ip, 
+        CONFIG['args']['plug_name'], 
+        CONFIG['args']['home_wifi'],
+        tplink_creds=CONFIG['script']['tp_link_account_creds'],
+        printlogs=True)
 
     print("Setting Kasa SmartPlug '{}' to '{}'".format(plug_ip, plug_state))
 
