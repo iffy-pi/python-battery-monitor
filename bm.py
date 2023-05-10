@@ -7,7 +7,7 @@ from enum import Enum
 import argparse
 
 BMTASKNAME= "BatteryMonitor"
-LOGFILEDIR='C:\\Users\\omnic\\OneDrive\\Documents\\Misc\\battery_monitor'
+LOGFILEDIR= r'C:\Users\omnic\OneDrive\Computer Collection\Battery Monitor\bm_logs'
 
 TASKSTATES = {
 	'ready'
