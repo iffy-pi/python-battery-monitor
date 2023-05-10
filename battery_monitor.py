@@ -750,7 +750,7 @@ def main():
             type = str,
             metavar='<IP Address>',
             help = "The IP Address of the Kasa Smart Plug e.g. 192.168.1.1",
-            default = None
+            default = ARGS_CONFIG.get('plug_ip')
         )
 
         parser.add_argument(
@@ -759,7 +759,7 @@ def main():
             type = str,
             metavar='<Plug Name>',
             help = "The name of the Kasa Smart Plug as is on your Kasa Account",
-            default = None
+            default = ARGS_CONFIG.get('plug_name')
         )
 
         parser.add_argument(
@@ -768,7 +768,7 @@ def main():
             type = str,
             metavar='<Home Wifi Name>',
             help = "The name of your home wifi network, used to determine if your laptop is at home",
-            default = None
+            default = ARGS_CONFIG.get('home_wifi')
         )
 
         parser.add_argument(
@@ -901,7 +901,7 @@ def main():
         OUTSTREAM.log('Initializing Smart Plug Controller')
         SMART_PLUG_CONTROLLER = SmartPlugController( 
             options.plug_ip, 
-            ARGS_CONFIG['plug_name'], 
+            options.plug_name, 
             options.home_wifi, 
             tplink_creds=SCRIPT_CONFIG['tp_link_account_creds'])
         
