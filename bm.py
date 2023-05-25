@@ -108,7 +108,7 @@ def latest_log():
 	list_of_files = glob.glob(f'{LOGFILEDIR}\\*.log')
 	# get the c time of each file and use that as the key to order the list
 	# and identify the maximum
-	latest_file = max(list_of_files, key=os.path.getctime)
+	latest_file = max(list_of_files, key=os.path.getmtime)
 	
 	return os.path.join(LOGFILEDIR, latest_file)
 
