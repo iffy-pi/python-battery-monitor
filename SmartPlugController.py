@@ -5,10 +5,11 @@ import asyncio
 from kasa import SmartDeviceException
 from kasa import SmartPlug #https://python-kasa.readthedocs.io/en/latest/index.html
 
-class SPCSubprocessException(Exception):
+class SmartPlugControllerException(Exception):
     def __init__(self, message):
         self.message = message
         super().__init__(self.message)
+
 
 class SmartPlugController():
     def __init__( self, 
@@ -78,7 +79,7 @@ class SmartPlugController():
         out = out.decode('utf-8')
 
         if error_check and err.strip() != '':
-            raise SPCSubprocessException(f'Process Failed: "{err}"')
+            raise SmartPlugControllerException(f'Process Failed: "{err}"')
 
         return out, err
 
@@ -87,7 +88,7 @@ class SmartPlugController():
         Returns true if the calling device (laptop) is on the home network, i.e. network with name `self.home_network`.
         '''
         if self.home_network == '':
-            raise Exception('No home network provided!')
+            raise SmartPlugControllerException('No home network provided!')
 
         data, _ = SmartPlugController.__get_process_output(['netsh', 'WLAN', 'show', 'interfaces'])
         data_lines = data.split('\n')
@@ -122,7 +123,7 @@ class SmartPlugController():
         connected = ( info['state'].lower() == 'connected')
 
         if adapter != 'wi-fi':
-            raise Exception('Unrecognized interface name: "{}", reconfigure parsing!'.format(info['name']))
+            raise SmartPlugControllerException('Unrecognized interface name: "{}", reconfigure parsing!'.format(info['name']))
         
         return ( connected and network == self.home_network )
 
@@ -144,7 +145,7 @@ class SmartPlugController():
 
         username, password = self.tplink_creds
         if username is None or password is None:
-            raise Exception('No username and password information!')
+            raise SmartPlugControllerException('No username and password information!')
         
         output, _ = SmartPlugController.__get_process_output(['tplinkcmd.exe', '-login', '-username', username, '-password', password])
 
@@ -187,14 +188,14 @@ class SmartPlugController():
         plug = SmartPlug(self.plug_ip)
         await plug.update()  # Request the update
         return plug.is_on
-    
+        
     def is_plug_on(self) -> bool:
         '''
         Checks if the plug is on.
         '''
         return asyncio.run(self.__is_plug_on())
-
-    def __plug_set(self, on: bool, off: bool) -> bool:
+    
+    def isPlugSetTo(self, on: bool = False, off: bool = False) -> bool:
         '''
         Checks if the plug was already set to the desired value i.e. if the plug is already on or off.
         Returns true if:
@@ -223,7 +224,7 @@ class SmartPlugController():
         Returns 0 if the request was successful or plug was already set, -1 if the plug could not be set, and -2 if not on the home network.
         '''
         if not (on or off):
-            raise Exception('No plug control was set!')
+            raise SmartPlugControllerException('No plug control was set!')
         
         self.log('Setting plug to {} state'.format('on' if on else 'off'))
 
@@ -231,36 +232,27 @@ class SmartPlugController():
             self.log('Not on home network')
             return -2
 
-        if self.__plug_set(on, off): 
+        if self.isPlugSetTo(on=on, off=off): 
             self.log('Plug was already set')
             return 0
         
         if use_pykasa:
-            # python control first
             try:
                 self.log('Setting plug via python')
                 asyncio.run(self.set_plug_with_pykasa(on=on, off=off))
             except SmartDeviceException as e:
                 self.log(f'Python Control Failed: {e}')
         
-
-            # check if it worked and return if it did
-            if self.__plug_set(on, off): return 0
+        if self.isPlugSetTo(on=on, off=off): return 0
 
         if use_tplink:
-            # otherwise try the cloud
             self.log('Setting plug via cloud')
             try:
                 self.set_plug_via_tplink(on=on, off=off)
-            
-            except KeyboardInterrupt:
-                raise KeyboardInterrupt
-            except Exception as e:
+            except SmartPlugControllerException as e:
                 self.log(f'Cloud Control Failed: {e}')
 
-            # check if it worked and return if it did
-            # return 1 meaning it had to resort to second level
-            if self.__plug_set(on, off): return 1
+        if self.isPlugSetTo(on=on, off=off): return 1
         
         self.log('Plug control failed')
         return -1
