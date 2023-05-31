@@ -1,10 +1,8 @@
 import os
 import sys
 import traceback
-import re
 from datetime import datetime as mydt
-from datetime import timedelta
-import time
+from time import time, sleep
 import threading
 from winsound import Beep as beep
 import psutil
@@ -18,6 +16,7 @@ if script_loc_dir not in sys.path:
 from SmartPlugController import *
 from EmailBot import EmailBot
 from TimeString import TimeString
+from TimerSleep import timerSleep
 
 CONFIG = {
     'script' : {
@@ -173,17 +172,27 @@ class ScriptSleepController():
     
     Accounts for sleep predictions, modifying predictions when battery is near thresholds.
 
-    Designed to be a  Singleton Class.
+    Designed to be a  Singleton Class, so is used as a gloval variable in the script.
     '''
-    def __init__(self, battery_floor, battery_ceiling, des_percent_drop=5, init_pred=10):
+    def __init__(self, batteryFloor: int, batteryCeiling: int, checkIntervalPercentage:int = 5, initPred: int = 10, predAdaptivity: float = 0.89):
+        '''
+        Initialize a sleep controller object.
+        - `batteryFloor`   : The minimum battery percentage.
+        - `batteryCeiling` : The maximum battery percentage.
+        - `checkIntervalPercentage` : Sleep controller will predict sleep periods such that battery will be checked every `checkIntervalPercentage`%.
+        - `initPred` : The initial sleep prediction to make without any history. 
+        - `predAdaptivity` : A value between 0 and 1 that indicates how adaptive the controller's predictions are to recent behaviour instead overall history. 
+            Higher values result in recent behaviour having more weight than overall history.
+        '''
         self.curPercent = None
         self.charging = None
         self.prevPercent = None
         self.sleepPeriod = None
-        self.batteryFloor = battery_floor
-        self.batteryCeiling = battery_ceiling
-        self.desPercentDrop = des_percent_drop
-        self.initSleepPred = init_pred
+        self.batteryFloor = batteryFloor
+        self.batteryCeiling = batteryCeiling
+        self.checkIntervalPercentage = checkIntervalPercentage
+        self.predAdaptivity = predAdaptivity
+        self.initSleepPred = initPred
         self.drift = 0
 
     def log(txt):
@@ -205,44 +214,31 @@ class ScriptSleepController():
         '''
         self.drift += secs
 
-    def sleep(secs=0, mins=0, hours=0, verbose=True):
-
-        def makecolontime(secs):
-            '''
-            Returns the given number of secs in the format: <hours> : <minutes> : <seconds>
-            '''
-            secs_in_a_day = 86400
-            days = int(secs/secs_in_a_day)
-            secs = secs % secs_in_a_day
+    def sleep(secs: int = 0, mins: int = 0, hours: int = 0, verbose=True):
+        '''
+            Puts process to sleep for specified amount of time.
             
-            td = str(timedelta(seconds=secs)).split(':')
-            td[0] = str( int(td[0]) + days*24)
-            return ' : '.join(td)
+            If `verbose`, then a time remaining countdown will also be maintained on the console
 
+            If script is headless, `verbose` will always be false.
+        '''
         secs = secs + (mins*60) + (hours*3600)
-        if secs == 0: return
+        
+        if secs == 0:
+            return
+        
+        # if we are in headless there is no console
+        verbose = False if HEADLESS else verbose
 
         # flush logs before going to sleep
         SCOUT.flushToFile()
 
-        if HEADLESS or not verbose:
-            time.sleep(secs)
+        if not verbose:
+            sleep(secs)
             return
-
-        max_width = len(makecolontime(secs))
-        msg_format = "Sleeping... " + "{:<" + str(max_width) + "s}"
-        msg_len = len(msg_format.format('a'))
-
-        # writes the time stamp on the same line every second to simulate countdown
-        for remaining in range(secs, 0, -1):
-            sys.stdout.write("\r" + msg_format.format(makecolontime(remaining)))
-            sys.stdout.flush()
-            time.sleep(1)
-
-        # overwrite timestamp with Done when finished sleeping
-        finish_msg_format = "{:<" + str(msg_len) + "s}"
-        finish_msg = finish_msg_format.format('Done!')
-        sys.stdout.write("\r{}\n".format(finish_msg))
+        
+        # otherwise use timer sleep
+        timerSleep(secs)
 
     def trackedSleep(self, secs:int):
         '''
@@ -252,6 +248,9 @@ class ScriptSleepController():
         ScriptSleepController.sleep(secs=secs)
 
     def predictSleepPeriod(self):
+        '''
+        Predicts the amount of time to sleep to check the battery every `checkIntervalPercentage`%
+        '''
         # predicts the amount of time to sleep so that we check the battery every (des_percent_drop)%
 
         # based on process burst prediction: q_(n+1) = a*t_n + (1-a)q_n 
@@ -262,37 +261,40 @@ class ScriptSleepController():
         # pred_ct (q_n) is the predicted time it took to change delta% ( corresponds to q_(n-1))
         # next_pred_ct (q_(n+1)) is the predicted time to change delta% for next iteration
 
-        a = 0.89
-
-        # Include tracked drift as time between calls
-        prev_period = self.sleepPeriod + self.drift if self.sleepPeriod is not None else None
-        self.drift = 0
-
-        if self.prevPercent is None or prev_period is None:
+        if self.prevPercent is None or self.sleepPeriod is None:
             ScriptSleepController.log('Initial Prediction')
             return self.initSleepPred
+
+        # Include tracked drift as time between calls
+        prev_period = self.sleepPeriod + self.drift
+        self.drift = 0
 
         percent_drop_per_sec = abs(self.curPercent - self.prevPercent) / float(prev_period)
 
         if percent_drop_per_sec == 0.0:
-            # no change in battery
-            # double the prediction
+            # double predictions until we get some percentage drop
             ScriptSleepController.log('No Change, doubled the prediction.')
             return prev_period*2
 
         # calculate the actual time it would take to drop by our desired percent
-        actual_drop_period = self.desPercentDrop / percent_drop_per_sec
+        actual_drop_period = self.checkIntervalPercentage / percent_drop_per_sec
 
         # use the round robin formulat to calculate our next prediction
-        next_pred = int( a*actual_drop_period + (1-a)*prev_period )
+        next_pred = int( self.predAdaptivity*actual_drop_period + (1-self.predAdaptivity)*prev_period )
 
         return next_pred
 
     def getSleepPeriod(self):
+        '''
+        Used to get the next sleep period for battery checks.
+
+        Uses the prediction made with `predictSleepPeriod` but overrides it
+        if the time to reach one of the thresholds is less than the prediction.
+        '''
         cur_percent = self.curPercent
         pred_sleep_period = self.predictSleepPeriod()
 
-        secs_per_percent = pred_sleep_period / self.desPercentDrop
+        secs_per_percent = pred_sleep_period / self.checkIntervalPercentage
 
         percent_till_floor = abs(cur_percent - self.batteryFloor)
         percent_till_ceiling = abs(self.batteryCeiling - cur_percent)
@@ -316,9 +318,6 @@ class ScriptSleepController():
         self.prevPercent = self.curPercent
         battery = psutil.sensors_battery()
         self.curPercent, self.charging = battery.percent, battery.power_plugged
-        
-        if self.sleepPeriod is not None:
-            ScriptSleepController.printlg(f'Previous Sleep Period: {TimeString.make(self.sleepPeriod)}')
 
         self.sleepPeriod = self.getSleepPeriod()
 
@@ -346,7 +345,7 @@ def send_notification(title, body):
     toast.show()
 
 
-def get_alert_info(low=False, high=False, last=False):
+def get_alert_info(isLow, last):
     
     curbattery, _ = get_battery_info()
     descs = {
@@ -354,7 +353,7 @@ def get_alert_info(low=False, high=False, last=False):
         'high': ('High', 'above', 'maximum', 'still' )
     }
 
-    desc = descs[ 'low' if low else 'high' ]
+    desc = descs[ 'low' if isLow else 'high' ]
 
     title = '{} Battery Alert'.format(desc[0])
     if last: title = 'FINAL CALL - {}'.format(title)
@@ -366,7 +365,7 @@ def get_alert_info(low=False, high=False, last=False):
             batt=curbattery,
             boundarydesc=desc[1],
             limdesc=desc[2],
-            batterylim= BATTERY_FLOOR if low else BATTERY_CEILING,
+            batterylim= BATTERY_FLOOR if isLow else BATTERY_CEILING,
             chargeverb=desc[3],
         ),
         'Manual assistance is required.'
@@ -374,8 +373,18 @@ def get_alert_info(low=False, high=False, last=False):
 
     return email_title, title, body
 
-def send_battery_alerts(low=False, high=False, email=False, sound=False, last=False):
-    email_title, title, body = get_alert_info(low=low, high=high, last=last)
+def send_battery_alerts(isLow, email=False, sound=False, last=False):
+    '''
+    Sends alerts about battery conditions. If `isLow` is true, it will be low battery conditions,
+    otherwise will be high battery conditions.
+
+    If `email` is true, an email alert will be sent (if credentials are available).
+
+    If `sound` is true, a buzzer sound will be made.
+
+    `last` is used to indicate that this is the last battery alert.
+    '''
+    email_title, title, body = get_alert_info(isLow, last)
 
     if sound:
         SCOUT.printlg('Playing sound..')
@@ -386,7 +395,7 @@ def send_battery_alerts(low=False, high=False, email=False, sound=False, last=Fa
 
     if email and EMAILBOT is not None:
         subject = '{} - {}'.format(email_title, mydt.now().strftime('%b %d %Y %H:%M'))
-        EMAILBOT.sendEmail(subject, body, SCRIPT_CONFIG['email_alert_recipient'], important=(low or last))
+        EMAILBOT.sendEmail(subject, body, SCRIPT_CONFIG['email_alert_recipient'], important=(isLow or last))
         SCOUT.printlg('Email Alert Sent!')
 
 def handle_battery_case(high_battery, low_battery):
@@ -421,11 +430,10 @@ def handle_battery_case(high_battery, low_battery):
         SCOUT.printlg( msg )
 
         send_battery_alerts(
-            low=low_battery,
-            high=high_battery,
+            isLow= low_battery,
             sound=(attempts_made >= 1),
             email=(attempts_made >= 2),
-            last=(attempts_made == MAX_ATTEMPTS -1)
+            last=(attempts_made == MAX_ATTEMPTS-1)
         )
         
         wait_for = 120 if attempts_made < 2 else ALERT_PERIOD
@@ -479,11 +487,14 @@ def started_notif():
     send_notification('Headless Battery Monitor', 'Battery monitor started successfully and running in headless mode. Log file: {}'.format(os.path.split(SCOUT.logFileAddr)[1]))  
 
 def testing():
-    botcreds = SCRIPT_CONFIG['email_bot_account_creds']
-    eb = EmailBot('smtp.gmail.com', botcreds[0], botcreds[1])
-    print('Sending')
-    eb.sendEmail('Testing', 'Hello World', 'iffysbot@gmail.com')
-    print('SENT')
+    VEET = False
+
+    def simple_func(arg=VEET):
+        print(f'VEET is {VEET}')
+
+    VEET = True
+    simple_func(VEET)
+
 
 def main():
 
@@ -629,8 +640,14 @@ def main():
         if options.testing:
             testing()
             return 0
+        
+        if BATTERY_FLOOR >= BATTERY_CEILING:
+            raise Exception(f'Minimum battery ({BATTERY_FLOOR}%) must be less than maximum battery ({BATTERY_CEILING}%)')
 
         SCOUT.log('Script Started')
+
+        if HEADLESS: started_notif()
+
         SCOUT.log(
             'Args: ( min={}%, max={}%, grain={}%, alert={}, attempts={})'
             .format(
@@ -648,8 +665,6 @@ def main():
         SCOUT.print('')
         SCOUT.flushToFile()
 
-        if HEADLESS: started_notif()
-
         SCOUT.log('Initializing Smart Plug Controller')
 
         SMART_PLUG_CONTROLLER = SmartPlugController( 
@@ -663,7 +678,7 @@ def main():
         SLEEP_CONTROLLER = ScriptSleepController(
             BATTERY_FLOOR,
             BATTERY_CEILING,
-            des_percent_drop=options.grain)
+            checkIntervalPercentage=options.grain)
         
         SCOUT.log('Initializing Email Bot')
 
