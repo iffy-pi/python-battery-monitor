@@ -24,14 +24,14 @@ class EmailBot:
 
     def sendEmail(self, subject: str, body: str, mainRecipient: str, otherRecipients: list = [], files:list =[], important:bool =False, content="text"):
         '''
-            Sends an email using the credentials and server initialized with the object.
-            - `subject` is the title of the email
-            - `body` is the body of the email
-            - `mainRecipient` is the email address of the main reciepient
-            - `otherRecipients` is the list of email addresses that will be CC-ed in the email
-            - `files` is the list of file addresses that will be opened and attached with the emai;
-            - `important` for if the email should be marked as important
-            - `content` is the type of content in the body, can be "text" for standard text, or "html"
+        Sends an email using the credentials and server initialized with the object.
+        - `subject` is the title of the email
+        - `body` is the body of the email
+        - `mainRecipient` is the email address of the main reciepient
+        - `otherRecipients` is the list of email addresses that will be CC-ed in the email
+        - `files` is the list of file addresses that will be opened and attached with the emai;
+        - `important` for if the email should be marked as important
+        - `content` is the type of content in the body, can be "text" for standard text, or "html"
         '''
         if mainRecipient not in otherRecipients: otherRecipients.insert(0, mainRecipient)
         

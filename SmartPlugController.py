@@ -200,9 +200,9 @@ class SmartPlugController():
         Checks if the plug was already set to the desired value i.e. if the plug is already on or off.
         Returns true if:
             
-            plug is on, and `on` is true, 
-            
-            or plug is off and `off` is true.
+        plug is on, and `on` is true, 
+        
+        or plug is off and `off` is true.
         '''
         try:
             plug_on = self.is_plug_on()
