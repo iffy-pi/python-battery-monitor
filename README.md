@@ -23,7 +23,10 @@ hibernate_off_plug.py checks if the plug is off and turns it off if not. This wa
 bm.py is a command line utility to quickly check the status of the battery monitor windows scheduled task.
 
 
-# Other Included Scripts
+# Included Scripts
+## Main Script
+battery_monitor.py
+
 ## Internal Scripts
 - SmartPlugController.py
     - Handles communication with Kasa Smart Plug.
@@ -34,7 +37,8 @@ bm.py is a command line utility to quickly check the status of the battery monit
 - TimerSleep.py
     -  A special sleep function that maintains a countdown timer on the console.
 
-## bm.py
+## Utility Scripts
+### bm.py
 This script is designed to be a command line utility to monitor, stop, start and reset the Battery Monitor Windows task running on your laptop. (Make it a command line utility by adding the actual call to the python executable in a batch file e.g. bm.cd or bm.bat)
 
 ```bash
@@ -46,7 +50,7 @@ bm.py status
 bm.py logs
 ```
 
-## test_smart_plug.py
+### test_smart_plug.py
 Tests sending controls to the smart plug by turning it on or off. It pulls plug information from your private config.
 
 ```bash
@@ -55,7 +59,7 @@ test_smart_plug.py on
 # Turn the plug off
 test_smart_plug.py off
 ```
-## hibernate_off_plug.py
+### hibernate_off_plug.py
 Turns the plug off if it can. Used as a method to turn the plug off when the computer goes into hibernation.
 
 # Script Requirements
