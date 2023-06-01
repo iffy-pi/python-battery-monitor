@@ -25,6 +25,7 @@ def main():
         CONFIG['args']['plug_name'], 
         CONFIG['args']['home_wifi'],
         tplink_creds=CONFIG['script']['tp_link_account_creds'],
+        TPLinkAvail=CONFIG['script']['tp_link_cmd_installed'],
         printlogs=True)
 
     print("Setting Kasa SmartPlug '{}' to '{}'".format(plug_ip, plug_state))

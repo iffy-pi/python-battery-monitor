@@ -30,6 +30,9 @@ CONFIG = {
         # Directory where log files are written to 
         'log_files_dir': None,
 
+        # Set to true if the TP Link Command Line Utility (https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca) is installed on your computer 
+        'tp_link_cmd_installed' : False,
+
         # TP Link Account Credentials, tuple in the format of (username, password)
         # Recommended to use keyring rather than storing credentials in the script directly
         'tp_link_account_creds': None
@@ -487,13 +490,7 @@ def started_notif():
     send_notification('Headless Battery Monitor', 'Battery monitor started successfully and running in headless mode. Log file: {}'.format(os.path.split(SCOUT.logFileAddr)[1]))  
 
 def testing():
-    VEET = False
-
-    def simple_func(arg=VEET):
-        print(f'VEET is {VEET}')
-
-    VEET = True
-    simple_func(VEET)
+    print(SCRIPT_CONFIG['tp_link_cmd_installed'])
 
 
 def main():
@@ -671,7 +668,8 @@ def main():
             options.plug_ip, 
             options.plug_name, 
             options.home_wifi, 
-            tplink_creds=SCRIPT_CONFIG['tp_link_account_creds'])
+            tplink_creds=SCRIPT_CONFIG['tp_link_account_creds'],
+            TPLinkAvail=SCRIPT_CONFIG['tp_link_cmd_installed'])
         
         SCOUT.log('Initializing Sleep Controller')
 

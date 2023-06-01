@@ -12,7 +12,7 @@ def main():
         CONFIG['args']['plug_ip'], 
         CONFIG['args']['plug_name'], 
         CONFIG['args']['home_wifi'],
-        None)
+        )
 
     res = plc.set_plug(off=True)
     

@@ -17,28 +17,26 @@ class SmartPlugController():
                  plug_name:str, 
                  home_network_name:str, 
                  tplink_creds:tuple=None, 
+                 TPLinkAvail:bool = False,
                  logging=True, 
                  printlogs=False):
         '''
         Initialize a SmartPlug Controller, takes:
 
-        `plug_ip` : IP Address of smart plug.
-
-        `plug_name` : Name of the smart plug.
-
-        `home_network_name` : Name of your home network.
-
-        `tplink_creds`: TP Link Account credentials in the form of tuple: `(username, password)`
-
-        `logging` : If controller will be performing logs.
-
-        `printlogs` : Print logs as they are generated.
+        - `plug_ip` : IP Address of smart plug.
+        - `plug_name` : Name of the smart plug.
+        - `home_network_name` : Name of your home network.
+        - `tplink_creds`: TP Link Account credentials in the form of tuple: `(username, password)`
+        - `TPLinkAvail` : True if the TP Link Command Line Utility (https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca) is installed on the computer 
+        - `logging` : If controller will be performing logs.
+        - `printlogs` : Print logs as they are generated.
         '''
         
         self.plug_ip = plug_ip
         self.plug_name = plug_name
         self.home_network = home_network_name
         self.tplink_creds = tplink_creds
+        self.TPLinkAvail = TPLinkAvail
         self.logs = []
         self.logging = logging
         self.printlogs = printlogs
@@ -133,6 +131,10 @@ class SmartPlugController():
 
         First runs TPLinkCmd.exe log in command with `self.tplink_creds`, then runs TPLinkCmd with specified arguments.
         '''
+        if not self.TPLinkAvail:
+            self.log('TP Link Command Line Utility is not available')
+            return
+
         # cmargs is args to the tplinkcmd.exe
 
         # uses TPLinkCmd.exe 
@@ -235,6 +237,9 @@ class SmartPlugController():
         if self.isPlugSetTo(on=on, off=off): 
             self.log('Plug was already set')
             return 0
+        
+        # only use tp link if it is available
+        use_tplink = False if not self.TPLinkAvail else use_tplink
         
         if use_pykasa:
             try:
