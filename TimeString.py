@@ -11,15 +11,15 @@ class TimeString():
     Class provides functionality to parse and create such time strings
 
     Example TimeStrings are shown below:
-    | Time String Argument	| Represented Amount of Time 			|
-    | :---      			|    :---     							|
-    | `30s` 				| 30 seconds 							|
-    | `1m` 					| 1 minute 								|
-    | `3h` 					| 3 hours 								|
-    | `1m 25s` 				| 1 minute and 25 seconds 				|
-    | `3h30s` 				| 3 hours and 30 seconds 				|
-    | `3h 3m` 				| 3 hours and 3 minutes 				|
-    | `2h30m16s` 			| 2 hours, 30 minutes and 16 seconds 	|
+    | Time String Argument     | Represented Amount of Time           |
+    | :---                     |    :---                              |
+    | `30s`                    | 30 seconds                           |
+    | `1m`                     | 1 minute                             |
+    | `3h`                     | 3 hours                              |
+    | `1m 25s`                 | 1 minute and 25 seconds              |
+    | `3h30s`                  | 3 hours and 30 seconds               |
+    | `3h 3m`                  | 3 hours and 3 minutes                |
+    | `2h30m16s`               | 2 hours, 30 minutes and 16 seconds   |
 
     Can also use full names, like mins, secs, and hours e.g. "2hrs 3mins 2secs" or "2hours 3mins 2secs"
     '''
