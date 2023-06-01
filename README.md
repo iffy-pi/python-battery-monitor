@@ -24,8 +24,15 @@ bm.py is a command line utility to quickly check the status of the battery monit
 
 
 # Other Included Scripts
-## SmartPlugController.py
-Class that handles communicating with Kasa Smart Plug.
+## Internal Scripts
+- SmartPlugController.py
+    - Handles communication with Kasa Smart Plug.
+- EmailBot.py
+    - Handles sending emails to a given recipient, used for email alerts.
+- TimeString.py
+    - Converts seconds to/from a readable string that includes minutes and hours.
+- TimerSleep.py
+    -  A special sleep function that maintains a countdown timer on the console.
 
 ## bm.py
 This script is designed to be a command line utility to monitor, stop, start and reset the Battery Monitor Windows task running on your laptop. (Make it a command line utility by adding the actual call to the python executable in a batch file e.g. bm.cd or bm.bat)
@@ -52,12 +59,19 @@ test_smart_plug.py off
 Turns the plug off if it can. Used as a method to turn the plug off when the computer goes into hibernation.
 
 # Script Requirements
-## Required Applications
+## Devices
+- A TP Link Smart Plug (https://www.kasasmart.com/us/products/smart-plugs)
+    - The HS103 is an applicable smart plug and draws enough power to charge laptops.
+- A Windows laptop with a battery
+
+## Applications
 1. Python (at least 3.9)
 2. TP Link or Kasa Account
-2. TP Link Command Line Utility (https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca&rtc=1)
+3. TP Link Command Line Utility (https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca&rtc=1)
 
-## Required Python Packages
+    *TP Link Command Line Utility is not required by the script to run but does enhance its functionality and makes it more stable. It is a paid application ($1.29). If you don't want to use it you can set `tp_link_cmd_installed` to `False` in the `CONFIG` dictionary discussed below.*
+
+## Python Packages
 The required python packages are listed in requirements.txt. They can be installed using the command:
 
 ```
@@ -94,6 +108,9 @@ CONFIG = {
         
         # Directory where log files are created
         'log_files_dir': 'C:\\Users\\sample_user\\Documents\\sample_logs',
+
+        # Set to true if the TP Link Command Line Utility (https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca) is installed on your computer 
+        'tp_link_cmd_installed' : False,
 
         # TP Link Account credentials
         'tp_link_account_creds': ('sample_tp_link_username@gmail.com', 'sample_tp_link_password456'),
