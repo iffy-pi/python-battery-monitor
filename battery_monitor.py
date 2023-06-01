@@ -216,11 +216,11 @@ class ScriptSleepController():
 
     def sleep(secs: int = 0, mins: int = 0, hours: int = 0, verbose=True):
         '''
-            Puts process to sleep for specified amount of time.
-            
-            If `verbose`, then a time remaining countdown will also be maintained on the console
+        Puts process to sleep for specified amount of time.
+        
+        If `verbose`, then a time remaining countdown will also be maintained on the console
 
-            If script is headless, `verbose` will always be false.
+        If script is headless, `verbose` will always be false.
         '''
         secs = secs + (mins*60) + (hours*3600)
         
@@ -284,7 +284,7 @@ class ScriptSleepController():
 
         return next_pred
 
-    def getSleepPeriod(self):
+    def getNextSleepPeriod(self):
         '''
         Used to get the next sleep period for battery checks.
 
@@ -319,7 +319,7 @@ class ScriptSleepController():
         battery = psutil.sensors_battery()
         self.curPercent, self.charging = battery.percent, battery.power_plugged
 
-        self.sleepPeriod = self.getSleepPeriod()
+        self.sleepPeriod = self.getNextSleepPeriod()
 
         ScriptSleepController.printlg(f'Sleeping {TimeString.make(self.sleepPeriod)}...')
         ScriptSleepController.sleep( secs=self.sleepPeriod )
