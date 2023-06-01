@@ -10,40 +10,18 @@ The script works with Kasa Smart Plugs (https://www.kasasmart.com/us/products/sm
 # How it works
 The behaviour flow chart for the script is shown in the below diagram.
 
+**NOTE, THIS SECTION IS STILL BEING COMPLETED**
 
-## Your private config file.
-You can add private configurations in the same format of the `CONFIG` dictionary in battery_monitor.py by creating the file `config.py` in a folder named `private`. If the file exists, the script will override the default configuration with the information in the file.
+`battery_monitor.py` controls a Kasa Smart Plug (see https://www.kasasmart.com/us/products/smart-plugs) that is turned on or off when the battery reaches defined thresholds. The smart plug controls power to the PC and therefore acts as a way to turn on or turn off charging to the system.
 
-For example, `python-battery-monitor\private\config.py` would contain:
+The battery percentage of the PC is checked periodically, this checking period is automatically determined based on the script configurations
 
-```python
-CONFIG = {
-    'script': {
-        'email_bot_account_creds': ('sample_email_username@gmail.com', 'sample_email_password123'),
-        'email_alert_recipient': 'sample_email_recipient@gmail.com',
-        'log_files_dir': 'C:\\Users\\sample_user\\Documents\\sample_logs',
-        'tp_link_account_creds': ('sample_tp_link_username@gmail.com', 'sample_tp_link_password456'),
-    },
-    'args' : {
-        # IP Address of the plug
-        'plug_ip': '192.168.1.100',
-        'plug_name': 'Sample Smart Plug',
-        # Home Wifi Network Name
-        'home_wifi': 'Sample_Wifi',
-        # Battery minimums and maximums
-        'battery_min': 20,
-        'battery_max': 90,
-        # Check battery every grain %
-        'grain': 10,
-        # How many seconds to wait between each alert
-        'alert_period_secs': 600,
-        # Maximum number of alert attempts
-        'max_alert_attempts': 10
-    }
-}
-```
+If the script fails to control the plug, a Windows Notification and an email (sent to `EMAIL_RECEIVER` defined in the script) is sent to notify the user.
 
-Note: It is recommended to use keyring to store account credentials rather than storing them in the script directly.
+hibernate_off_plug.py checks if the plug is off and turns it off if not. This was designed to run before computer hibernation/shutdown to ensure battery does not over charge.
+
+bm.py is a command line utility to quickly check the status of the battery monitor windows scheduled task.
+
 
 # Other Included Scripts
 ## SmartPlugController.py
@@ -71,20 +49,9 @@ test_smart_plug.py on
 test_smart_plug.py off
 ```
 ## hibernate_off_plug.py
-Turns the plug off if it can. Used as a method to turn the plug off when the computer goes into hibernation. 
+Turns the plug off if it can. Used as a method to turn the plug off when the computer goes into hibernation.
 
-# Main function
-`battery_monitor.py` controls a Kasa Smart Plug (see https://www.kasasmart.com/us/products/smart-plugs) that is turned on or off when the battery reaches defined thresholds. The smart plug controls power to the PC and therefore acts as a way to turn on or turn off charging to the system.
-
-The battery percentage of the PC is checked periodically, this checking period is automatically determined based on the script configurations
-
-If the script fails to control the plug, a Windows Notification and an email (sent to `EMAIL_RECEIVER` defined in the script) is sent to notify the user.
-
-hibernate_off_plug.py checks if the plug is off and turns it off if not. This was designed to run before computer hibernation/shutdown to ensure battery does not over charge.
-
-bm.py is a command line utility to quickly check the status of the battery monitor windows scheduled task.
-
-# Requirements
+# Script Requirements
 ## Required Applications
 1. Python (at least 3.9)
 2. TP Link or Kasa Account
@@ -98,50 +65,125 @@ pip install -r requirements.txt
 ```
 
 # Script Usage
+## Your Private Configuration File
+The private configuration file can be used to store script settings and environment variables, otherwise they would have to be specified every time the script is ran.
+
+The configuration file is a python file that contains one dictionary variable named `CONFIG`.
+
+Within the `CONFIG` dictionary, there are two sub-dictionaries:
+- `script` 
+    - Contains information used by the script across multiple executions, such as the log file directory, account credentials etc.
+    - These are required for the script to run correctly.
+- `args`
+    - Contains information that is used as default arguments for when the script is started.
+    - If not specified, script will prompt for arguments in the command line.
+    - Allows for easy modification of script settings such as Plug Information without having to change task action command.
+
+A template of the `CONFIG` dictionary is included at the beginning of battery_monitor.py. This contains the expected keys and their values.
+
+The configuration file should be named `config.py` and stored in a folder named `private`, created in the same directory as the battery monitor script. So for example, `python-battery-monitor\private\config.py` would contain:
+
+```python
+CONFIG = {
+    'script': {
+        # account credentials of the email bot, set to None if you don't have any available
+        'email_bot_account_creds': ('sample_email_username@gmail.com', 'sample_email_password123'),
+
+        # email address of the alert recipient, set to None if you don't have any avaialable
+        'email_alert_recipient': 'sample_email_recipient@gmail.com',
+        
+        # Directory where log files are created
+        'log_files_dir': 'C:\\Users\\sample_user\\Documents\\sample_logs',
+
+        # TP Link Account credentials
+        'tp_link_account_creds': ('sample_tp_link_username@gmail.com', 'sample_tp_link_password456'),
+    },
+
+    'args' : {
+        # IP Address of the plug
+        'plug_ip': '192.168.1.100',
+        'plug_name': 'Sample Smart Plug',
+
+        # Home Wifi Network Name
+        'home_wifi': 'Sample_Wifi',
+        
+        # Battery minimums and maximums
+        'battery_min': 20,
+        'battery_max': 90,
+        
+        # Check battery every grain %
+        'grain': 10,
+        
+        # How many seconds to wait between each alert
+        'alert_period_secs': 600,
+        
+        # Maximum number of alert attempts
+        'max_alert_attempts': 10
+    }
+}
+```
+For account credentials, it is recommended to use Python keyring to store and retrieve them rather than putting them in the script directly. You can refer to https://www.geeksforgeeks.org/storing-passwords-with-python-keyring/ for setting and retrieving account credentials with Keyring.
+
 ## Pre-Configuration
 Before the script can be used, you will need to have the following information
-1. Your home wifi network name
-2. The IP Address of your Kasa Smart Plug
-3. Directory where script logs can be stored
-4. Email Bot Account
-5. Email to receive alerts
-6. Your TP Link Account Credentials
+- Your home wifi network name
+- The IP Address of your Kasa Smart Plug
+- The name of your Kasa Smart plug
+- Directory where script logs can be stored
+- Email Bot Account Credentials (if available)
+- Email to send alerts to (if available)
+- Your TP Link Account Credentials
 
 Use this information to populate the associated fields in the `CONFIG` dictionary.
 
 ## Arguments
-Use `--help` to get the information on the script arguments.
+You can fill in your desired arguments in the `args` field of `CONFIG`. You can also pass them to the script directly (or to override your arguments in `CONFIG`) with the scripts argument flags. Run battery_monitor.py with the argument `--help` to get information about script arguments.
+
+## Running the Script
+You can run the script through the command line:
+
+```
+python battery_monitor.py
+```
+
+Note, that the script is designed to be constantly running which might make the console window inconvenient. If you prefer instead to run it as a background process, you can use the argument `--headless`, which ensures that the script does not print to console.
+
+```
+python battery_monitor.py --headless
+```
+
+Instructions have been included below to configure the script as a background process on Windows.
 
 # Running Script As A Process on Windows
-This script is designed to be constantly running, and should be automatically run on startup of the system. To do this, in Windows follow the below steps.
+Follow the steps below to configure battery_monitor.py as a background process on Windows which automatically runs on computer start up.
 
 1. Open Task Scheduler program 
 
-![Task Scheduler Program](/doc/task_scheduler_program_on_start.png?raw=true "Task Scheduler Program")
+    ![Task Scheduler Program](/doc/task_scheduler_program_on_start.png?raw=true "Task Scheduler Program")
 
 2. In Task Scheduler, right click `Task Scheduler Library` and click `Create Task` 
 
-![Create A Task](/doc/create_task.png?raw=true "Create a Task")
+    ![Create A Task](/doc/create_task.png?raw=true "Create a Task")
 
 3. On the `General` tab, give the task a name and check to `Run only when the user is logged on`. 
 
-![General Information of Battery Task](/doc/battery_task_general.png?raw=true "General Information of Battery Task")
+    ![General Information of Battery Task](/doc/battery_task_general.png?raw=true "General Information of Battery Task")
 
 4. On the `Triggers` tab, set it to be triggered on log on of the relevant user. 
 
-![Trigger Battery Task to be run on log on](/doc/battery_task_triggers.png?raw=true "Trigger Battery Task to be run on log on")
+    ![Trigger Battery Task to be run on log on](/doc/battery_task_triggers.png?raw=true "Trigger Battery Task to be run on log on")
 
 5. On the `Actions` tab, select `Start a program`. Use the path to the python executable as the path for the program or script. In the `Add arguments` field, place the absolute path to the battery monitor script with its command line arguments e.g. `C:\Users\omnic\local\GitRepos\CodingMisc\BatteryMonitor\battery_monitor.py -min 25 -max 85` 
 
-![Put Battery Monitor Script as Action](/doc/battery_task_actions.png?raw=true "Put Battery Monitor Script as Action")
+    To start it as a background (windowless) process you can use `pythonw.exe` rather than `python.exe`, and add `--headless` as an argument for the battery monitor script.
 
-To start it as a background process you can use `pythonw.exe` rather than `python.exe`, and add the addition of the `--headless` argument.
+    ![Put Battery Monitor Script as Action](/doc/battery_task_actions.png?raw=true "Put Battery Monitor Script as Action")
 
-*Note: It is recommended to use your private config to contain most of your command line arguments, as it prevents the need to change the task when they change.*
+    *Note: It is recommended to use your private config to contain most of your command line arguments, as it prevents the need to change the task when they change.*
 
 6. On the `Settings` tab, check `Allow task to be run on demand`. This will allow you to run the task immediately. Also select `Stop the existing instance` from the drop down of the rules when task is already running. This will make sure the on demand run will override any existing instance. Finally make sure to UNCHECK `Stop the task if it runs longer than:` since the script itself can be running for several days without issue.
 
-![Battery Task Settings](/doc/battery_task_settings.png?raw=true "Battery Task Settings")
+    ![Battery Task Settings](/doc/battery_task_settings.png?raw=true "Battery Task Settings")
 
 ### Shortcut to run task on demand
 You can create a Windows shortcut with the below target to run the battery monitor task on demand if clicked:
