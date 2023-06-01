@@ -136,7 +136,7 @@ Before the script can be used, you will need to have the following information
 
 Use this information to populate the associated fields in the `CONFIG` dictionary.
 
-## Arguments
+## Script Arguments
 You can fill in your desired arguments in the `args` field of `CONFIG`. You can also pass them to the script directly (or to override your arguments in `CONFIG`) with the scripts argument flags. Run battery_monitor.py with the argument `--help` to get information about script arguments.
 
 ## Running the Script
@@ -185,7 +185,7 @@ Follow the steps below to configure battery_monitor.py as a background process o
 
     ![Battery Task Settings](/doc/battery_task_settings.png?raw=true "Battery Task Settings")
 
-### Shortcut to run task on demand
+## Shortcut to run task on demand
 You can create a Windows shortcut with the below target to run the battery monitor task on demand if clicked:
 ```
 C:\Windows\System32\schtasks.exe /run /tn "BatteryMonitor"
