@@ -9,6 +9,10 @@ from private.config import CONFIG
 def main():
     args = sys.argv[1:]
 
+    if len(args) == 0 or args[0] in ('-h', '--help'):
+        print("<'on' or 'off'> [--no-tplink] [--no-pykasa]")
+        return 1
+
     plug_ip = CONFIG['args']['plug_ip']
     plug_state = args[0]
 
