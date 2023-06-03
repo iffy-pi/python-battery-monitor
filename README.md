@@ -44,9 +44,7 @@ Users can configure how much percent the battery should change before the next b
 
 To ensure that the sleep period matches the desired check interval, the script uses exponential averaging to predict the sleep period for the desired battery change. The formula is shown below:
 
-$
-\text{Next sleep period} = \alpha(\text{actual time for desired battery change}) + (1-\alpha)(\text{previous sleep period})
-$
+$\text{Next sleep period} = \alpha(\text{actual time for desired battery change}) + (1-\alpha)(\text{previous sleep period})$
 
 The script calculates the actual time to get the desired battery change using linear extrapolation on the battery change between the current sleep call and the previous sleep call.
 
