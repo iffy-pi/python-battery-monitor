@@ -8,20 +8,51 @@ This provides a better solution than always charging the laptop, as this affects
 The script works with Kasa Smart Plugs (https://www.kasasmart.com/us/products/smart-plugs), and has been tested using the HS103 smart plug.
 
 # How it works
-The behaviour flow chart for the script is shown in the below diagram.
+The high level function of the monitor script is described in the flow chart below.
 
-**NOTE, THIS SECTION IS STILL BEING COMPLETED**
+![Script Control Flow Chart](/doc/images/script_control_flow_chart.png?raw=true "Script Control Flow Chart")
 
-`battery_monitor.py` controls a Kasa Smart Plug (see https://www.kasasmart.com/us/products/smart-plugs) that is turned on or off when the battery reaches defined thresholds. The smart plug controls power to the PC and therefore acts as a way to turn on or turn off charging to the system.
+The script begins by reading the battery percentage and charging status of the computer. If the battery is between the minimum and maximum thresholds, then the script sleeps till the next battery check is required. The amount of time the script sleeps is calculated from the desired battery check interval and measured battery change rate, see [Sleep Prediction for Battery Checks](#sleep-prediction-for-battery-checks).
 
-The battery percentage of the PC is checked periodically, this checking period is automatically determined based on the script configurations
+*Note: Variables specified in brackets are fields within the `CONFIG` dictionary. See [Your Private Configuration File](#your-private-configuration-file).*
 
-If the script fails to control the plug, a Windows Notification and an email (sent to `EMAIL_RECEIVER` defined in the script) is sent to notify the user.
+If the battery is outside the threshold, there is one of two conditions:
+- Low Battery Condition: Battery is less than or equal to the specified minimum percentage (`battery_min`) and computer is not charging.
+- High Battery Condition: Battery is greater than or equal to the specified maximum percentage (`battery_max`) and computer is charging.
 
-hibernate_off_plug.py checks if the plug is off and turns it off if not. This was designed to run before computer hibernation/shutdown to ensure battery does not over charge.
+For both conditions, the script runs the function `handle_battery_case` to resolve the battery condition.
 
-bm.py is a command line utility to quickly check the status of the battery monitor windows scheduled task.
+In `handle_battery_case`, the script attempts to control the smart plug based on the battery condition:
+- If low battery, then script attempts to turn smart plug on.
+- If high battery, then script attempts to turn smart plug off.
 
+The script's attempt to control the smart plug may not be successful for a variety of reasons (not on the home network, no internet connectivity, or plug-side failure). Therefore, the battery conditions are checked after the smart plug is controlled. If the battery conditions are resolved, the script exits the function and sleeps till the next battery check.
+
+If the battery condition is not resolved at this point, manual intervention from the user is required. The script alerts the user with:
+- A windows notification and 
+- A sound notification after 1 attempt and
+- An email notification (sent to `email_alert_recipient`) after 2 attempts.
+
+The script then waits for the user action. For the first two attempts, the script waits 2 minutes as the assumption is that the user could be using the laptop or could be nearby. After first two attempts, the user may not be close to the computer so the script instead waits the user configured alert period (`alert_period_secs`).
+
+After the wait period, the script checks if the battery condition is resolved and sleeps till the next battery check if it is. Otherwise it repeats the process of attempting plug control and then alerting the user for a set amount of attempts (`max_attempts`). After this, the script just sleeps till the next battery check.
+
+When the script wakes up for the next battery check, it repeats the entire process again.
+
+## Sleep Prediction for Battery Checks
+Users can configure how much percent the battery should change before the next battery check is done by the script (with `grain` in `CONFIG`).
+
+To ensure that the sleep period matches the desired check interval, the script uses exponential averaging to predict the sleep period for the desired battery change. The formula is shown below:
+
+$
+\text{Next sleep period} = \alpha(\text{actual time for desired battery change}) + (1-\alpha)(\text{previous sleep period})
+$
+
+The script calculates the actual time to get the desired battery change using linear extrapolation on the battery change between the current sleep call and the previous sleep call.
+
+$\alpha$ ($0 < \alpha < 1$) is the adaptivity weight of the prediction. As $\alpha$ increases, the prediction becomes more responsive to recent behaviour as opposed to long term trends. $\alpha=0.89$ is used by the script since it allows predictions to adapt to changes in the computer workload.
+
+To set a different adaptivity weight, change the default value of `predAdaptivity` in the constructor (`__init__` function) of `ScriptSleepController` in battery_monitor.py.
 
 # Included Scripts
 ## Main Script
@@ -107,7 +138,7 @@ CONFIG = {
         # account credentials of the email bot, set to None if you don't have any available
         'email_bot_account_creds': ('sample_email_username@gmail.com', 'sample_email_password123'),
 
-        # email address of the alert recipient, set to None if you don't have any avaialable
+        # email address of the alert recipient, set to None if you don't have any available
         'email_alert_recipient': 'sample_email_recipient@gmail.com',
         
         # Directory where log files are created
@@ -180,31 +211,31 @@ Follow the steps below to configure battery_monitor.py as a background process o
 
 1. Open Task Scheduler program 
 
-    ![Task Scheduler Program](/doc/task_scheduler_program_on_start.png?raw=true "Task Scheduler Program")
+    ![Task Scheduler Program](/doc/images/task_scheduler_program_on_start.png?raw=true "Task Scheduler Program")
 
 2. In Task Scheduler, right click `Task Scheduler Library` and click `Create Task` 
 
-    ![Create A Task](/doc/create_task.png?raw=true "Create a Task")
+    ![Create A Task](/doc/images/create_task.png?raw=true "Create a Task")
 
 3. On the `General` tab, give the task a name and check to `Run only when the user is logged on`. 
 
-    ![General Information of Battery Task](/doc/battery_task_general.png?raw=true "General Information of Battery Task")
+    ![General Information of Battery Task](/doc/images/battery_task_general.png?raw=true "General Information of Battery Task")
 
 4. On the `Triggers` tab, set it to be triggered on log on of the relevant user. 
 
-    ![Trigger Battery Task to be run on log on](/doc/battery_task_triggers.png?raw=true "Trigger Battery Task to be run on log on")
+    ![Trigger Battery Task to be run on log on](/doc/images/battery_task_triggers.png?raw=true "Trigger Battery Task to be run on log on")
 
-5. On the `Actions` tab, select `Start a program`. Use the path to the python executable as the path for the program or script. In the `Add arguments` field, place the absolute path to the battery monitor script with its command line arguments e.g. `C:\Users\omnic\local\GitRepos\CodingMisc\BatteryMonitor\battery_monitor.py -min 25 -max 85` 
+5. On the `Actions` tab, select `Start a program`. Use the path to the python executable as the path for the program or script. In the `Add arguments` field, place the absolute path to the battery monitor script with its command line arguments e.g. `C:\Users\user\python-battery-monitor\battery_monitor.py -min 25 -max 85` 
 
     To start it as a background (windowless) process you can use `pythonw.exe` rather than `python.exe`, and add `--headless` as an argument for the battery monitor script.
 
-    ![Put Battery Monitor Script as Action](/doc/battery_task_actions.png?raw=true "Put Battery Monitor Script as Action")
+    ![Put Battery Monitor Script as Action](/doc/images/battery_task_actions.png?raw=true "Put Battery Monitor Script as Action")
 
     *Note: It is recommended to use your private config to contain most of your command line arguments, as it prevents the need to change the task when they change.*
 
 6. On the `Settings` tab, check `Allow task to be run on demand`. This will allow you to run the task immediately. Also select `Stop the existing instance` from the drop down of the rules when task is already running. This will make sure the on demand run will override any existing instance. Finally make sure to UNCHECK `Stop the task if it runs longer than:` since the script itself can be running for several days without issue.
 
-    ![Battery Task Settings](/doc/battery_task_settings.png?raw=true "Battery Task Settings")
+    ![Battery Task Settings](/doc/images/battery_task_settings.png?raw=true "Battery Task Settings")
 
 ## Shortcut to run task on demand
 You can create a Windows shortcut with the below target to run the battery monitor task on demand if clicked:
