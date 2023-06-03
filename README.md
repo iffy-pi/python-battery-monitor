@@ -26,7 +26,7 @@ In `handle_battery_case`, the script attempts to control the smart plug based on
 - If low battery, then script attempts to turn smart plug on.
 - If high battery, then script attempts to turn smart plug off.
 
-The script's attempt to control the smart plug may not be successful for a variety of reasons (not on the home network, no internet connectivity, or plug-side failure). Therefore, the battery conditions are checked after the smart plug is controlled. If the battery conditions are resolved, the script exits the function and sleeps till the next battery check.
+The script's attempt to control the smart plug may not be successful for a variety of reasons (see [Controlling The Smart Plug](#controlling-the-smart-plug)), therefore the battery conditions are checked after the smart plug is controlled. If the battery conditions are resolved, the script exits the function and sleeps till the next battery check.
 
 If the battery condition is not resolved at this point, manual intervention from the user is required. The script alerts the user with:
 - A windows notification and 
@@ -51,6 +51,21 @@ The script calculates the actual time to get the desired battery change using li
 $\alpha$ ($0 < \alpha < 1$) is the adaptivity weight of the prediction. As $\alpha$ increases, the prediction becomes more responsive to recent behaviour as opposed to long term trends. $\alpha=0.89$ is used by the script since it allows predictions to adapt to changes in the computer workload.
 
 To set a different adaptivity weight, change the default value of `predAdaptivity` in the constructor (`__init__` function) of `ScriptSleepController` in battery_monitor.py.
+
+## Controlling The Smart Plug
+Smart plug control is managed by the SmartPlugController class in SmartPlugController.py. The class utilizes the [python Kasa module](https://pypi.org/project/python-kasa/0.5.1/), along with the [TP Link Command Line Utility](https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca&rtc=1) to turn the smart plug on/off.
+
+When a request is made to the class to control the smart plug, it first checks if the laptop is on the user's home network (`home_wifi` in `CONFIG`). If the laptop is not on the home network, then the smart plug is unreachable and cannot be controlled, therefore the request is ended.
+
+Otherwise, the class attempts to control the smart plug using the APIs of the python Kasa module. This is usually successful but occassionally there can be a module [system set relay state error](https://forum.universal-devices.com/topic/34492-error-when-changing-device-state/) which prevents the plug from receiving the command.
+
+The TP Link Command Line Utility is used as a backup in the cases where the module fails. The class uses the utility to log onto the user's TP Link account and send the request to the plug through the cloud.
+
+TP Link Command Line Utility is a paid application ($1.29). It is not required by the script to run but does make it more stable as it reduces the need for user intervention when the python module fails.
+
+If users do not want the utility to be used simply set `tp_link_cmd_installed` to False in `CONFIG` (see [Your Private Configuration File](#your-private-configuration-file)). This would also eliminate the need for your TP Link Account Credentials.
+
+**Note: Python Kasa [v0.5.1](https://github.com/python-kasa/python-kasa/releases/tag/0.5.1) may have resolved the relay state error eliminating the need for the Utility.**
 
 # Included Files
 ## Main Script
@@ -91,8 +106,9 @@ test_smart_plug.py off
 ### hibernate_off_plug.py
 Turns the plug off if it can. Used as a method to turn the plug off when the computer goes into hibernation.
 
-### roboticon.png
-Icon used for windows notifications.
+## Other Files
+- roboticon.png
+    - Icon used in Windows Notifications
 
 # Script Requirements
 ## Devices
@@ -105,7 +121,7 @@ Icon used for windows notifications.
 2. TP Link or Kasa Account
 3. TP Link Command Line Utility (https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca&rtc=1)
 
-    *TP Link Command Line Utility is not required by the script to run but does enhance its functionality and makes it more stable. It is a paid application ($1.29). If you don't want to use it you can set `tp_link_cmd_installed` to `False` in the `CONFIG` dictionary discussed below.*
+    *TP Link Command Line Utility is a paid application ($1.29) but is not required to run the script ([Controlling The Smart Plug](#controlling-the-smart-plug)). If you don't want to use it you can set `tp_link_cmd_installed` to `False` in the `CONFIG` dictionary discussed below.*
 
 ## Python Packages
 The required python packages are listed in requirements.txt. They can be installed using the command:
