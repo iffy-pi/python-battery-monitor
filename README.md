@@ -113,7 +113,7 @@ Turns the plug off if it can. Used as a method to turn the plug off when the com
 # Script Requirements
 ## Devices
 - A TP Link Smart Plug (https://www.kasasmart.com/us/products/smart-plugs)
-    - The HS103 is an applicable smart plug and draws enough power to charge laptops.
+    - See supported smart plugs [here](https://github.com/python-kasa/python-kasa#supported-devices)
 - A Windows laptop with a battery
 
 ## Applications
