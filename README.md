@@ -1,4 +1,4 @@
-# Python PC Battery Monitor
+# Python Laptop Battery Monitor
 The script battery_monitor.py is designed to periodically check a laptop's battery and turn on/off a smart plug as appropriate. This can be used to implement automatic laptop charging by having the laptop's charger always connected to the smart plug.
 
 This allows users to have a PC-like experience with their laptop at home, no longer having to deal with checking the battery or plugging it in. It is especially ideal for those who have a static laptop set up (such as a workbench) where the laptop is docked.
