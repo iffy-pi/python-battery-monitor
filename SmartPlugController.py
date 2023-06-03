@@ -243,7 +243,7 @@ class SmartPlugController():
         
         if use_pykasa:
             try:
-                self.log('Setting plug via python')
+                self.log('Setting plug with Python Kasa')
                 asyncio.run(self.set_plug_with_pykasa(on=on, off=off))
             except SmartDeviceException as e:
                 self.log(f'Python Control Failed: {e}')
@@ -251,11 +251,11 @@ class SmartPlugController():
         if self.isPlugSetTo(on=on, off=off): return 0
 
         if use_tplink:
-            self.log('Setting plug via cloud')
+            self.log('Setting plug with TP Link CL Utility')
             try:
                 self.set_plug_via_tplink(on=on, off=off)
             except SmartPlugControllerException as e:
-                self.log(f'Cloud Control Failed: {e}')
+                self.log(f'CL Utility Failed: {e}')
 
         if self.isPlugSetTo(on=on, off=off): return 1
         
