@@ -145,7 +145,7 @@ CONFIG = {
         # Directory where log files are created
         'log_files_dir': 'C:\\Users\\sample_user\\Documents\\sample_logs',
 
-        # Set to true if the TP Link Command Line Utility (https://apps.microsoft.com/store/detail/tplink-kasa-control-command-line/9ND8C9SJB8H6?hl=en-ca&gl=ca) is installed on your computer 
+        # Set to true if the TP Link Command Line Utility is installed on your computer 
         'tp_link_cmd_installed' : False,
 
         # TP Link Account credentials
