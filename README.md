@@ -52,7 +52,7 @@ $\alpha$ ($0 < \alpha < 1$) is the adaptivity weight of the prediction. As $\alp
 
 To set a different adaptivity weight, change the default value of `predAdaptivity` in the constructor (`__init__` function) of `ScriptSleepController` in battery_monitor.py.
 
-# Included Scripts
+# Included Files
 ## Main Script
 battery_monitor.py
 
@@ -90,6 +90,9 @@ test_smart_plug.py off
 ```
 ### hibernate_off_plug.py
 Turns the plug off if it can. Used as a method to turn the plug off when the computer goes into hibernation.
+
+### roboticon.png
+Icon used for windows notifications.
 
 # Script Requirements
 ## Devices
