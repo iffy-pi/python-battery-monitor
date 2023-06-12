@@ -327,7 +327,15 @@ class ScriptSleepController():
         ScriptSleepController.printlg(f'Sleeping {TimeString.make(self.sleepPeriod)}...')
         ScriptSleepController.sleep( secs=self.sleepPeriod )
 
+def scriptErrNotif(errorObj, logFilePath):
+    title = 'Headless Battery Monitor Failure'
+    body = str(errorObj)
+    logFilePath = os.path.abspath(logFilePath)
+    path = "file:///{}".format(logFilePath.replace("\\", "/"))
 
+    toast = Notification("Battery Monitor Bot", title, msg=body, icon=WIN_NOTIF_ICON)
+    toast.add_actions(label="Open log file", launch=path)
+    toast.show()
 
 def get_battery_info():
     battery = psutil.sensors_battery() 
@@ -685,7 +693,6 @@ def main():
         if botcreds is not None:
             EMAILBOT = EmailBot('smtp.gmail.com', botcreds[0], botcreds[1])
 
-
         monitor_battery()
         SCOUT.log('Script Ended')
 
@@ -693,10 +700,9 @@ def main():
         SCOUT.printlg('\nScript Exception: "{}"'.format(e))
 
         if HEADLESS:
-            send_notification(
-                'Headless Battery Monitor Failure',
-                'Error: "{}"'.format(e)
-            )
+            # WRITE error to script
+            SCOUT.log(traceback.format_exc())
+            scriptErrNotif(e, LOG_FILE_ADDR)
         else:
             traceback.print_exc()
 
