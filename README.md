@@ -67,6 +67,16 @@ If users do not want the utility to be used simply set `tp_link_cmd_installed` t
 
 **Note: Python Kasa [v0.5.1](https://github.com/python-kasa/python-kasa/releases/tag/0.5.1) may have resolved the relay state error eliminating the need for the Utility.**
 
+## Extra Note: Unlock Signal
+When the script sleeps till the next battery checks, it reads the UNLOCK_SIGNAL file for a 1 value. If a 1 value is read, the script clears its accumulated sleep history and begins making predictions from scratch.
+
+This allows the script to be notified of system unlocks while running. This can be achieved by creating a Windows Task in Task Scheduler to run the script `battery_monitor_unlock_signal.py`, triggered by a workstation unlock.
+
+This was introduced to accomo,date the large increase in power usage when a user logs on after an extended period of time away. Due to the extended period of time away, the sleep periods to read the same drop in battery percentage can get long. In some instances, the increased power usage from the user returning drains the laptop battery before the monitor wakes up again, causing the laptop to die unexpectedly.
+
+The unlock signal is configured with an "open" period of 1 hour, meaning that the unlock signal will not be triggered if another unlock happens within 1 hour minutes of the last unlock signal received by the monitor.
+
+
 # Included Files
 ## Main Script
 battery_monitor.py

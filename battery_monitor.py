@@ -73,11 +73,19 @@ ARGS_CONFIG = CONFIG['args']
 # Icon used for windows10 notification
 WIN_NOTIF_ICON = os.path.join(script_loc_dir, 'roboticon.png')
 LOG_FILE_ADDR = os.path.join( SCRIPT_CONFIG['log_files_dir'], 'status_{}_{}.log'.format(mydt.today().strftime('%H%M_%d_%m_%Y'), int(time.time())))
+UNLOCK_FILE = os.path.join(CONFIG['script']['log_files_dir'], 'unlock_signal.txt')
+
+
+class UnlockSignalException(Exception):
+    def __init__(self):
+        self.message = 'Unlock signal was set to high'
+        super().__init__(self.message)
+
 
 class ScriptOutputStream():
-    '''
+    """
     Manages the script output and logging. Is a singleton class
-    '''
+    """
     instance = None
 
     def __init__(self, logFileAddr, enableLogs, headless, printLogs):
@@ -148,9 +156,9 @@ class ScriptOutputStream():
             self.print(text)
 
     def print(self, text):
-        '''
+        """
         Print the text input to stdout if available
-        '''
+        """
         if self.headless:
             # headless script does not have a stdout, so just log it to the file
             self.log(text, headlessprint=True)
@@ -158,9 +166,9 @@ class ScriptOutputStream():
             print(text)
 
     def printlg(self, text):
-        '''
+        """
         Print the text and also log to logfile
-        '''
+        """
         # if headless, a print writes to log file, so remove duplicate call
         if (not self.headless): self.print(text)
 
@@ -197,34 +205,60 @@ class ScriptSleepController():
         self.predAdaptivity = predAdaptivity
         self.initSleepPred = initPred
         self.drift = 0
+        self.lastUnlockTime = None
 
+    @staticmethod
     def log(txt):
         SCOUT.log('{}'.format(txt))
 
+    @staticmethod
     def printlg(txt):
         SCOUT.printlg('{}'.format(txt))
 
+    @staticmethod
     def print(txt):
         SCOUT.print('{}'.format(txt))
 
-    def addToDrift(self, secs):
-        '''
-        Adds `secs` to drift.
-        Sleep predictions are based on the battery percentage between calls to sleep function.
-        We can't use time.time() to track the time between calls as that is the UNIX timestamp, so if the PC hibernates then sleep periods become invalid
-        To make predictions more accurate, significant time spent inbetween calls must be tracked e.g. alert sleeps
-        These can be tracked with the drift member, which is included when predicting the next sleep period.
-        '''
-        self.drift += secs
+    def unlock_signal_high(self):
+        with open(UNLOCK_FILE, 'r') as file:
+            cont = file.read().strip()
 
-    def sleep(secs: int = 0, mins: int = 0, hours: int = 0, verbose=True):
-        '''
+        if cont != '1':
+            return False
+
+        # Set the unlock signal to be read
+        with open(UNLOCK_FILE, 'w') as file:
+            file.write('0')
+
+        # Ony raise exception if its within time limits
+        if self.lastUnlockTime is not None:
+            curTime = time.time_ns()
+            diffSecs = (curTime - self.lastUnlockTime) / float(1E9)
+            if diffSecs < 60 * 60:
+                return False
+
+        self.lastUnlockTime = time.time_ns()
+        ScriptSleepController.log('Unlock Signal Was Read To Be High')
+        return True
+
+
+    def checkUnlockSignal(self):
+        if self.unlock_signal_high():
+            raise UnlockSignalException()
+
+
+    def sleep(self, secs: int = 0, mins: int = 0, hours: int = 0, verbose=True, checkUnlockSignal=False):
+        """
         Puts process to sleep for specified amount of time.
-        
+
         If `verbose`, then a time remaining countdown will also be maintained on the console
 
         If script is headless, `verbose` will always be false.
-        '''
+        If checkUnlockSignal is true, unlock file will be checked
+        Will throw UnlockSignalException if unlock signal caused it to break
+        """
+        if checkUnlockSignal:
+            ScriptSleepController.log(f'Script will be checking unlock signal  in UNLOCK_FILE: {UNLOCK_FILE}')
         secs = secs + (mins*60) + (hours*3600)
         
         if secs == 0:
@@ -236,24 +270,42 @@ class ScriptSleepController():
         # flush logs before going to sleep
         SCOUT.flushToFile()
 
-        if not verbose:
-            sleep(secs)
+        if verbose:
+            timerSleep(secs, checkFnc=self.checkUnlockSignal if checkUnlockSignal else None)
             return
-        
-        # otherwise use timer sleep
-        timerSleep(secs)
+
+        if checkUnlockSignal:
+            # Sleep 1 second and check the signal each time
+            for _ in range(secs):
+                sleep(1)
+                self.checkUnlockSignal()
+            return
+
+        # Just regular timer sleep
+        sleep(secs)
+        return
+
+    def addToDrift(self, secs):
+        '''
+        Adds `secs` to drift.
+        Sleep predictions are based on the battery percentage between calls to sleep function.
+        We can't use time.time() to track the time between calls as that is the UNIX timestamp, so if the PC hibernates then sleep periods become invalid
+        To make predictions more accurate, significant time spent inbetween calls must be tracked e.g. alert sleeps
+        These can be tracked with the drift member, which is included when predicting the next sleep period.
+        '''
+        self.drift += secs
 
     def trackedSleep(self, secs:int):
-        '''
+        """
         Sleep the specified number of seconds and adds it as drift
-        '''
+        """
         self.addToDrift(secs)
-        ScriptSleepController.sleep(secs=secs)
+        self.sleep(secs=secs)
 
     def predictSleepPeriod(self):
-        '''
+        """
         Predicts the amount of time to sleep to check the battery every `checkIntervalPercentage`%
-        '''
+        """
         # predicts the amount of time to sleep so that we check the battery every (des_percent_drop)%
 
         # based on process burst prediction: q_(n+1) = a*t_n + (1-a)q_n 
@@ -325,7 +377,13 @@ class ScriptSleepController():
         self.sleepPeriod = self.getNextSleepPeriod()
 
         ScriptSleepController.printlg(f'Sleeping {TimeString.make(self.sleepPeriod)}...')
-        ScriptSleepController.sleep( secs=self.sleepPeriod )
+        try:
+            self.sleep( secs=self.sleepPeriod , checkUnlockSignal=True)
+        except UnlockSignalException as e:
+            ScriptSleepController.log('Recieved UnlockSignalException. Resetting Sleep History and Predictions')
+            self.prevPercent = None
+            self.sleepPeriod = None
+            send_notification('Sleep History Reset', "The script's learned sleep history has been reset to accomodate for the increase in power usage")
 
 def scriptErrNotif(errorObj, logFilePath):
     title = 'Headless Battery Monitor Failure'
@@ -515,7 +573,7 @@ def main():
 
     SCOUT = ScriptOutputStream.getInstance(logFileAddr=LOG_FILE_ADDR, enableLogs=False, headless=False, printLogs=False)
     
-    HEADLESS = False
+    HEADLESS = (sys.stdout is None)
     
     try:
         parser = argparse.ArgumentParser()

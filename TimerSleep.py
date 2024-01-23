@@ -1,7 +1,7 @@
 import sys
 from time import sleep
 
-def timerSleep(secs: int) -> None:
+def timerSleep(secs: int, checkFnc=None) -> None:
         '''
         Puts process to sleep for the specified seconds.
 
@@ -34,6 +34,9 @@ def timerSleep(secs: int) -> None:
             sys.stdout.write("\r" + msg_format.format(formatSecs(remaining)))
             sys.stdout.flush()
             sleep(1)
+            # Run our check function if any
+            if checkFnc is not None:
+                checkFnc()
 
         # overwrite timestamp with Done when finished sleeping
         finish_msg_format = "{:<" + str(msg_len) + "s}"
