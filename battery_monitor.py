@@ -234,7 +234,7 @@ class ScriptSleepController():
         if self.lastUnlockTime is not None:
             curTime = time.time_ns()
             diffSecs = (curTime - self.lastUnlockTime) / float(1E9)
-            if diffSecs < 60 * 60:
+            if diffSecs < 120 * 60:
                 return False
 
         self.lastUnlockTime = time.time_ns()

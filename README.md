@@ -74,7 +74,7 @@ This allows the script to be notified of system unlocks while running. This can 
 
 This was introduced to accomo,date the large increase in power usage when a user logs on after an extended period of time away. Due to the extended period of time away, the sleep periods to read the same drop in battery percentage can get long. In some instances, the increased power usage from the user returning drains the laptop battery before the monitor wakes up again, causing the laptop to die unexpectedly.
 
-The unlock signal is configured with an "open" period of 1 hour, meaning that the unlock signal will not be triggered if another unlock happens within 1 hour minutes of the last unlock signal received by the monitor.
+The unlock signal is configured with an "open" period of 2 hours, meaning that the unlock signal will not be triggered if another unlock happens within 2 hours of the last unlock signal received by the monitor.
 
 
 # Included Files

@@ -87,7 +87,7 @@ def stop_bm():
 	print('Stopping Battery Monitor task')
 	bm_task(["/end"])
 
-def reset_bm():
+def restart_bm():
 	stop_bm()
 	start_bm()
 
@@ -139,7 +139,7 @@ def main():
 	uniword_commands = {
 		'start': start_bm,
 		'stop': stop_bm,
-		'reset': reset_bm,
+		'restart': restart_bm,
 		'status': bm_status,
 	}
 
