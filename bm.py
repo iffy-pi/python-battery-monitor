@@ -116,7 +116,7 @@ def show_latest_log(openlog=False, linecnt=13):
 	logfile = latest_log()
 
 	if openlog:
-		subprocess.Popen(['notepad.exe', logfile])
+		os.startfile(logfile, 'open')
 		return
 
 	with open( logfile, 'r') as file:
