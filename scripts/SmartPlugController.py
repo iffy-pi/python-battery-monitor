@@ -11,7 +11,7 @@ class SmartPlugControllerException(Exception):
         super().__init__(self.message)
 
 
-class SmartPlugController():
+class SmartPlugController:
     def __init__( self, 
                  plug_ip:str, 
                  plug_name:str, 

@@ -3,7 +3,7 @@ import os
 
 script_loc_dir = os.path.split(os.path.realpath(__file__))[0]
 if script_loc_dir not in sys.path:  sys.path.append(script_loc_dir)
-from SmartPlugController import SmartPlugController
+from scripts.SmartPlugController import SmartPlugController
 from private.config import CONFIG
 
 def main():
