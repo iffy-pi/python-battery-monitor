@@ -2,18 +2,18 @@ import os
 import sys
 import traceback
 from datetime import datetime as mydt
-import argparse
 
 script_loc_dir = os.path.split(os.path.realpath(__file__))[0]
 if script_loc_dir not in sys.path:
     sys.path.append(script_loc_dir)
 
-from scripts.functions import send_notification, error_notification, get_battery_info, do_beeps_threaded
+from scripts.bm_logging import console, logger, printer
+from scripts.functions import send_notification, get_battery_info, do_beeps_threaded
 from scripts.ScriptSleepController import ScriptSleepController
 from scripts.SmartPlugController import *
 from scripts.EmailBot import EmailBot
 from scripts.TimeString import TimeString
-from scripts.ScriptOutputStream import ScriptOutputStream
+
 
 
 class EmailNotifier:
@@ -27,14 +27,13 @@ class EmailNotifier:
 
 
 class BatteryMonitor:
-    def __init__(self, batteryFloor: int, batteryCeiling: int, checkGrain: int, alertPeriodSecs: int, maxAttempts: int, logger:ScriptOutputStream, plug: SmartPlugController, emailer: EmailNotifier, headless:bool = False):
+    def __init__(self, batteryFloor: int, batteryCeiling: int, checkGrain: int, alertPeriodSecs: int, maxAttempts: int, plug: SmartPlugController, emailer: EmailNotifier, headless:bool = False):
         self.batteryMin = batteryFloor
         self.batteryMax = batteryCeiling
         self.grain = checkGrain
         self.alertPeriod = alertPeriodSecs
         self.maxAttempts = maxAttempts
         self.headless = headless
-        self.logger = logger
         self.plug = plug
         self.emailer = emailer
 
@@ -42,55 +41,42 @@ class BatteryMonitor:
             self.batteryMin,
             self.batteryMax,
             checkIntervalPercentage=self.grain,
-            logger=self.logger,
             headless=self.headless)
 
     def monitorBattery(self):
         iters = 0
-        self.logger.log('Entering While Loop')
-
         while True:
             try:
                 # put sleep first, doing so to eliminate if statements
                 if iters > 0:
                     self.sleepController.sleepTillNextBatteryCheck()
-
-                self.logger.log('Obtaining Battery Info')
                 cur_percent, charging = get_battery_info()
 
-                self.logger.printlg('Battery: {}%, {}'.format(cur_percent, 'Charging' if charging else 'Not Charging'))
+                printer.info('Battery Check: {}%, {}'.format(cur_percent, 'Charging' if charging else 'Not Charging'))
 
                 low_battery = (cur_percent <= self.batteryMin) and (not charging)
                 high_battery = (cur_percent >= self.batteryMax) and charging
 
                 if not (high_battery or low_battery):
-                    self.logger.printlg('No Action Required')
+                    printer.info('No Action Required')
                     iters += 1
                     continue
 
-                self.logger.printlg('{} Battery Detected'.format('Low' if low_battery else 'High'))
+                printer.info('{} Battery Detected'.format('Low' if low_battery else 'High'))
                 self.handleBatteryCase(high_battery, low_battery)
                 iters += 1
             except KeyboardInterrupt:
                 if self.headless:
-                    self.logger.printlg('\nScript exited due to keyboard interrupt')
+                    printer.info('\nExiting due to keyboard interrupt')
                     return
                 else:
                     try:
-                        self.logger.print('\nPress Ctrl+C again in 10s to end script')
+                        console.info('\nPress Ctrl+C again in 10s to end script')
                         self.sleepController.trackedSleep(secs=10)
                         iters = 0
                     except KeyboardInterrupt:
-                        self.logger.printlg('\nScript exited due to keyboard interrupt')
+                        printer.info('Exiting due to keyboard interrupt')
                         return
-
-    def printConfig(self):
-        self.logger.print('Script Configuration:')
-        self.logger.print(f'Battery Minimum: {self.batteryMin}%')
-        self.logger.print(f'Battery Maximum: {self.batteryMax}%')
-        self.logger.print(f'Check Battery Every: {self.grain}%')
-        self.logger.print(f'Alert Period: {TimeString.make(self.alertPeriod)}')
-        self.logger.print(f'Max Alert Attempts: {self.maxAttempts}')
 
     def handleBatteryCase(self, high_battery, low_battery):
         _, charging = get_battery_info()
@@ -98,30 +84,25 @@ class BatteryMonitor:
 
         while (low_battery and not charging) or (high_battery and charging):
             if attempts_made == self.maxAttempts:
-                self.logger.printlg('No More Attempts Remaining!')
+                printer.warn('Max alert attempts reached')
                 break
 
-            self.logger.printlg('Attempting Automatic Smart Plug Control')
+            printer.info('Attempting Automatic Smart Plug Control')
             try:
                 self.plug.set_plug(on=low_battery, off=high_battery)
-                self.plug.print_logs()
             except SmartPlugControllerException as e:
-                self.logger.printlg(f'Something went wrong: {e}')
+                printer.error(f'Plug Control Error: {e}')
+                logger.error(traceback.print_exc())
 
-            self.logger.print('Waiting 5 seconds for verification')
+            console.info('Waiting 5 seconds for verification')
             self.sleepController.trackedSleep(5)
 
             _, charging = get_battery_info()
             if (low_battery and charging) or (high_battery and not charging):
-                self.logger.printlg('Issue Resolved')
+                printer.info('Battery case has been handled')
                 break
 
-            msg = 'Notifying User With: Windows Notification'
-            if attempts_made >= 1: msg += ', Sound'
-            if attempts_made >= 2: msg += ', Email'
-
-            self.logger.printlg('Failed to control smart plug, manual assistance required')
-            self.logger.printlg(msg)
+            printer.info('Failed to control smart plug, manual assistance required')
 
             self.sendBatteryAlerts(
                 isLow=low_battery,
@@ -131,7 +112,7 @@ class BatteryMonitor:
             )
 
             wait_for = 120 if attempts_made < 2 else self.alertPeriod
-            self.logger.printlg(f'Waiting {TimeString.make(wait_for)} for user action...')
+            printer.info(f'Waiting {TimeString.make(wait_for)} for user action...')
             self.sleepController.trackedSleep(wait_for)
 
             attempts_made += 1
@@ -152,16 +133,17 @@ class BatteryMonitor:
         email_title, title, body = self.getAlert(isLow, last)
 
         if sound:
-            self.logger.printlg('Playing sound..')
+            printer.info('Playing sound..')
             do_beeps_threaded()
 
-        self.logger.printlg('Showing Windows Notification...')
+        printer.info('Showing Windows Notification...')
         send_notification(title, body)
 
         if email and self.emailer is not None:
+            printer.info('Sending Email...')
             subject = '{} - {}'.format(email_title, mydt.now().strftime('%b %d %Y %H:%M'))
             self.emailer.sendEmail(subject, body, important=(isLow or last))
-            self.logger.printlg('Email Alert Sent!')
+            printer.info('Email Alert Sent!')
 
     def getAlert(self, isLow, last):
         curbattery, _ = get_battery_info()
@@ -175,7 +157,7 @@ class BatteryMonitor:
         title = '{} Battery Alert'.format(desc[0])
         if last: title = 'FINAL CALL - {}'.format(title)
 
-        email_title = 'AJAK Auto Battery Monitor - {}'.format(title)
+        email_title = 'Laptop Auto Battery Monitor - {}'.format(title)
 
         body = '{}\n{}'.format(
             'Battery ({batt}%) is near or {boundarydesc} specified {limdesc} ({batterylim}%) and is {chargeverb} charging.'.format(

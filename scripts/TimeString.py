@@ -5,7 +5,7 @@ class TimeStringException(Exception):
         self.message = message
         super().__init__(self.message)
 
-class TimeString():
+class TimeString:
     '''
     Used to make or parse "TimeStrings", which are simple strings that represent a given amount of time.
     Class provides functionality to parse and create such time strings
@@ -24,6 +24,7 @@ class TimeString():
     Can also use full names, like mins, secs, and hours e.g. "2hrs 3mins 2secs" or "2hours 3mins 2secs"
     '''
 
+    @staticmethod
     def parse(timestr: str) -> int:
         '''
         Parse a time string into seconds
@@ -63,7 +64,7 @@ class TimeString():
         seconds = (groups[0]*3600) + (groups[1]*60) + groups[2]
         return seconds
 
-    
+    @staticmethod
     def make(seconds: int) -> str:
         '''
         Make time string from seconds input

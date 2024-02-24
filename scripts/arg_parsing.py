@@ -4,13 +4,9 @@ import sys
 from argparse import Namespace
 from os import path
 
-import keyring
 
 from scripts.TimeString import TimeString
-
-PLUG_CREDENTIAL_STORE = 'Battery_Monitor_TP_Link_Credentials'
-EMAIL_CREDENTIAL_STORE = 'Battery_Monitor_Email_Credentials'
-
+from scripts.functions import get_plug_password, get_emailer_password, PLUG_CREDENTIAL_STORE, EMAIL_CREDENTIAL_STORE
 
 class ArgumentException(Exception):
     def __init__(self, message):
@@ -77,18 +73,11 @@ class CommandLineArgs:
         if self.emailRecipient is not None and self.emailUsername is None:
             raise ArgumentException('Specified email recipient but no email credentials')
 
-        if self.emailUsername is not None and keyring.get_password(EMAIL_CREDENTIAL_STORE, self.emailUsername) is None:
+        if self.emailUsername is not None and get_emailer_password(self.emailUsername) is None:
             raise ArgumentException(f'Could not retrieve email credentials for email "{self.emailUsername}", are they stored in generic credential "{EMAIL_CREDENTIAL_STORE}"?')
 
-        if self.plugAccUsername is not None and keyring.get_password(PLUG_CREDENTIAL_STORE, self.plugAccUsername) is None:
+        if self.plugAccUsername is not None and get_plug_password(self.plugAccUsername) is None:
             raise ArgumentException(f'Could not retrieve TP Link credentials for username "{self.plugAccUsername}", are they stored in generic credential "{PLUG_CREDENTIAL_STORE}"?')
-
-
-
-
-
-
-
 
 
 def make_arg_parser(configFirst=False):
@@ -271,6 +260,30 @@ def parse_args() -> CommandLineArgs:
         sys.argv += newArgs
 
     args = make_arg_parser().parse_args()
+    return CommandLineArgs(args)
+
+def get_args_from_config_cli() -> CommandLineArgs:
+    """
+    Returns set of arguments for -config in command line
+    """
+    sysArgs = list(sys.argv)
+
+    if '-config' not in sysArgs:
+        raise ArgumentException('-config not in arguments')
+
+    ind = sysArgs.index('-config')
+    configFile = sysArgs[ind+1]
+    sysArgs.pop(ind+1)
+    sysArgs.pop(ind)
+
+    if not path.exists(configFile):
+        raise ArgumentException(f'Config file "{configFile}" does not exist!')
+
+    newArgs = convert_config_to_args(configFile, [])
+    sys.argv = [sys.argv[0]] + newArgs
+    args = make_arg_parser().parse_args()
+    sys.argv = sysArgs
+
     return CommandLineArgs(args)
 
 

@@ -3,7 +3,6 @@ import smtplib
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.utils import COMMASPACE
 from email import encoders
 
 class EmailBotException(Exception):
@@ -22,7 +21,7 @@ class EmailBot:
         self.__email = botEmail
         self.__password = botPswd
 
-    def sendEmail(self, subject: str, body: str, mainRecipient: str, otherRecipients: list = [], files:list =[], important:bool =False, content="text"):
+    def sendEmail(self, subject: str, body: str, mainRecipient: str, otherRecipients: list = None, files:list =None, important:bool =False, content="text"):
         '''
         Sends an email using the credentials and server initialized with the object.
         - `subject` is the title of the email
@@ -33,6 +32,12 @@ class EmailBot:
         - `important` for if the email should be marked as important
         - `content` is the type of content in the body, can be "text" for standard text, or "html"
         '''
+        if otherRecipients is None:
+            otherRecipients = []
+
+        if files is None:
+            files = []
+
         if mainRecipient not in otherRecipients: otherRecipients.insert(0, mainRecipient)
         
         msg = MIMEMultipart()

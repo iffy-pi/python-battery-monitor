@@ -1,19 +1,31 @@
 import sys
 import os
+import logging
+
 
 script_loc_dir = os.path.split(os.path.realpath(__file__))[0]
 if script_loc_dir not in sys.path:  sys.path.append(script_loc_dir)
+
 from scripts.SmartPlugController import SmartPlugController
-from private.config import CONFIG
+from scripts.arg_parsing import get_args_from_config_cli
+from scripts.functions import get_plug_password, get_log_format
+
+logger = logging.getLogger()
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(get_log_format())
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 def main():
+    config = get_args_from_config_cli()
+
     args = sys.argv[1:]
 
     if len(args) == 0 or args[0] in ('-h', '--help'):
         print("<'on' or 'off'> [--no-tplink] [--no-pykasa]")
         return 1
 
-    plug_ip = CONFIG['args']['plug_ip']
+    plug_ip = config.plugIP
     plug_state = args[0]
 
     if plug_state not in [ 'on', 'off' ]:
@@ -25,12 +37,12 @@ def main():
     use_pykasa = not ( '--no-pykasa' in args)
 
     plc= SmartPlugController(
-        plug_ip, 
-        CONFIG['args']['plug_name'], 
-        CONFIG['args']['home_wifi'],
-        tplink_creds=CONFIG['script']['tp_link_account_creds'],
-        TPLinkAvail=CONFIG['script']['tp_link_cmd_installed'],
-        printlogs=True)
+        config.plugIP,
+        config.plugName,
+        config.wifi,
+        tplink_creds=(config.plugAccUsername, get_plug_password(config.plugAccUsername)),
+        TPLinkAvail=get_plug_password(config.plugAccUsername) is not None,
+        logger=logger)
 
     print("Setting Kasa SmartPlug '{}' to '{}'".format(plug_ip, plug_state))
 

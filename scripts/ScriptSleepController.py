@@ -1,8 +1,8 @@
+from scripts.bm_logging import logger, printer, flush_logs
 from scripts.functions import send_notification
-from scripts.ScriptOutputStream import ScriptOutputStream
 from scripts.TimeString import TimeString
 from scripts.TimerSleep import timerSleep
-from time import time, time_ns, sleep
+from time import time_ns, sleep
 import psutil
 
 class UnlockSignalException(Exception):
@@ -22,7 +22,7 @@ class ScriptSleepController:
     '''
 
     def __init__(self, batteryFloor: int, batteryCeiling: int, checkIntervalPercentage: int = 5, initPred: int = 10,
-                 predAdaptivity: float = 0.93, logger: ScriptOutputStream=None, headless:bool = False):
+                 predAdaptivity: float = 0.93, headless:bool = False):
         '''
         Initialize a sleep controller object.
         - `batteryFloor`   : The minimum battery percentage.
@@ -43,7 +43,6 @@ class ScriptSleepController:
         self.initSleepPred = initPred
         self.drift = 0
         self.lastUnlockTime = None
-        self.logger = logger
         self.headless = headless
 
     def unlock_signal_high(self):
@@ -65,7 +64,7 @@ class ScriptSleepController:
                 return False
 
         self.lastUnlockTime = time_ns()
-        self.logger.log('Unlock Signal Was Read To Be High')
+        logger.info('Unlock Signal Was Read To Be High')
         return True
 
     def checkUnlockSignal(self):
@@ -85,7 +84,7 @@ class ScriptSleepController:
         # TODO: Doing override for testing purposes, remove when done
         checkUnlockSignal = False
         if checkUnlockSignal:
-            self.logger.log(f'Script will be checking unlock signal  in UNLOCK_FILE: {UNLOCK_FILE}')
+            logger.info(f'Script will be checking unlock signal  in UNLOCK_FILE: {UNLOCK_FILE}')
         secs = secs + (mins * 60) + (hours * 3600)
 
         if secs == 0:
@@ -95,7 +94,7 @@ class ScriptSleepController:
         verbose = False if self.headless else verbose
 
         # flush logs before going to sleep
-        self.logger.flushToFile()
+        flush_logs()
 
         if verbose:
             timerSleep(secs, checkFnc=self.checkUnlockSignal if checkUnlockSignal else None)
@@ -144,10 +143,11 @@ class ScriptSleepController:
         # next_pred_ct (q_(n+1)) is the predicted time to change delta% for next iteration
 
         if self.prevPercent is None or self.sleepPeriod is None:
-            self.logger.log('Initial Prediction')
+            logger.info(f'Calculated Prediction: {self.initSleepPred}s (Initial Prediction used)')
             return self.initSleepPred
 
         # Include tracked drift as time between calls
+        logger.info(f'Added {self.drift}s to previously predicted sleep period ({self.sleepPeriod}s)')
         prev_period = self.sleepPeriod + self.drift
         self.drift = 0
 
@@ -155,7 +155,7 @@ class ScriptSleepController:
 
         if percent_drop_per_sec == 0.0:
             # double predictions until we get some percentage drop
-            self.logger.log('No Change, doubled the prediction.')
+            logger.info(f'Calculated Prediction: {prev_period*2}s (Doubled prediction since no change was detected)')
             return prev_period * 2
 
         # calculate the actual time it would take to drop by our desired percent
@@ -163,6 +163,10 @@ class ScriptSleepController:
 
         # use the round robin formulat to calculate our next prediction
         next_pred = int(self.predAdaptivity * actual_drop_period + (1 - self.predAdaptivity) * prev_period)
+        logger.info(
+            'Calculated Prediction: %.2fs (Calculated from adaptivity=%.2f, grain=%d, predicted drop time=%.2fs, actual drop time=%.2fs)' % (
+            next_pred, self.predAdaptivity, self.checkIntervalPercentage, prev_period, actual_drop_period ))
+
 
         return next_pred
 
@@ -190,10 +194,10 @@ class ScriptSleepController:
         use_above_thresh = self.charging and (go_above_thresh_time < pred_sleep_period)
 
         if use_below_thresh or use_above_thresh:
-            self.logger.printlg('Using Pre-emptive threshold prediction')
+            logger.info('Next Sleep Period: Pre-emptive Threshold Prediction')
             return fall_below_thresh_time if use_below_thresh else go_above_thresh_time
 
-        self.logger.printlg('Using standard prediction')
+        logger.info('Next Sleep Period: Calculated Prediction')
         return pred_sleep_period
 
     def sleepTillNextBatteryCheck(self):
@@ -203,11 +207,11 @@ class ScriptSleepController:
 
         self.sleepPeriod = self.getNextSleepPeriod()
 
-        self.logger.printlg(f'Sleeping {TimeString.make(self.sleepPeriod)}...')
+        printer.info(f'Sleeping {TimeString.make(self.sleepPeriod)}...')
         try:
             self.sleep(secs=self.sleepPeriod, checkUnlockSignal=True)
         except UnlockSignalException as e:
-            self.logger.log('Recieved UnlockSignalException. Resetting Sleep History and Predictions')
+            logger.info('Recieved UnlockSignalException. Resetting Sleep History and Predictions')
             self.prevPercent = None
             self.sleepPeriod = None
             send_notification('Sleep History Reset',
