@@ -1,220 +1,405 @@
 import os
 import logging.handlers
 import sys
+from logging import StreamHandler
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from time import time
-from scripts.functions import get_log_format
+from scripts.functions import get_log_format, get_console_log_format, get_log_stdout_format
 
-"""
-Logger Configuration:
-We use the following loggers in our script:
-- logger
-    - Logs records to assigned log file
-    - Prints to stdout if print logs is enabled
-    - Does not log records if logs are disabled
-- console
-    - Prints to stdout (raw format)
-    - If script is headless, then it will log to the log file with console format
-    - If script is headless and logs are disabled, nothing will be logged
-- printer
-    - Logs to log file with console format
-    - Prints to stdout 
-    - If script is headless, it only logs to log file with console format
-    - If print logs is enabled, it will output console logs to stdout
-    - If logs are disabled and script is headless, nothing will be saved
-    
-- Available functions
-    - enable_logs(bool) : Enable or disable logs
-    - print_logs(bool) : Start printing or stop printing logs to stdout
-        - This is inactive when script is in headless mode
-    - is_printing_logs(): Returns if the script is currently printing logs
-    - set_headless(bool) : Set headless state of the script
-        - Headless mode, i.e. script has no stdout
-        - If set_headless(False), it will only be false if sys.stdout is None
-    
-Log Format example:
-2024-02-23 10:14:54 INFO     test.py                   [   9]: Help Me
+class LoggingController:
+    hConsoleFile: RotatingFileHandler
+    LOG_FORMAT = get_log_format()
+    CONSOLE_LOG_FORMAT = get_console_log_format()
+    PRINT_FORMAT = logging.Formatter('%(message)s')
+    NO_LOGS_AT_ALL_LEVEL = 90
+    CONSOLE_OUTPUT_LOGGER = 'console'
+    DATA_LOGGER = 'log'
+    PRINTER_LOGGER = 'printer'
+    def __init__(self, initLogFileAddr:str=None):
+        self.logFileAddr = initLogFileAddr
 
-"""
+        self.bHeadless = sys.stdout is None
+        self.bLoggingEnabled = True
+        self.bLoggingToFile = self.logFileAddr is not None
+        self.bPrintingLogs = False
 
-# Do our initial configuration
-LOG_FORMAT = get_log_format()
-CONSOLE_LOG_FORMAT = logging.Formatter('%(asctime)s  CONSOLE   %(filename)-25s [%(lineno)4d] %(message)s',
-                               datefmt='%Y-%m-%d %H:%M:%S')
-PRINT_FORMAT = logging.Formatter('%(message)s')
-NO_LOGS_AT_ALL_LEVEL = 90
-CONSOLE_OUTPUT_LOGGER = 'console'
-DATA_LOGGER = 'log'
-PRINTER_LOGGER = 'printer'
+        self.hLogFile, self.hConsoleFile = None, None
 
-log_file_addr = os.path.expanduser('~\\Battery_Monitor_Initial_Log.log')
-headless = sys.stdout is None
-bPrintingLogs = False
+        if self.bLoggingToFile:
+            self.hLogFile, self.hConsoleFile = self.createFileHandlers()
 
-# Logger object definitions
-logger = logging.getLogger(DATA_LOGGER)
-console = logging.getLogger(CONSOLE_OUTPUT_LOGGER)
-printer = logging.getLogger(PRINTER_LOGGER)
+        self.hConsoleOut, self.hLogOut, self.hLogConsoleOut = self.createStdOutHandlers()
 
-# Records are written to file using log format
-# Used by logger
-log_file_handler = logging.handlers.RotatingFileHandler(log_file_addr, 'a')
-log_file_handler.setFormatter(LOG_FORMAT)
+        # Our loggers
+        self.logger = logging.getLogger(self.DATA_LOGGER)
+        self.console = logging.getLogger(self.CONSOLE_OUTPUT_LOGGER)
+        self.printer = logging.getLogger(self.PRINTER_LOGGER)
+        self.logger.setLevel(logging.INFO)
+        self.console.setLevel(logging.INFO)
+        self.printer.setLevel(logging.INFO)
 
-# Records are printed to stdout with log format
-# Used by logger when print_logs is enabled
-log_stdout_handler = logging.StreamHandler(sys.stdout)
-log_stdout_handler.setFormatter(LOG_FORMAT)
+        self.configureLoggers()
 
-# Records are printed to stdout using console log format
-# Used by printer when print_logs is enabled
-log_console_stdout_handler = logging.StreamHandler(sys.stdout)
-log_console_stdout_handler.setFormatter(CONSOLE_LOG_FORMAT)
+    def createFileHandlers(self) -> tuple[RotatingFileHandler, RotatingFileHandler]:
+        # Records are written to file using log format
+        # Used by logger
+        logs_to_file = logging.handlers.RotatingFileHandler(self.logFileAddr, 'a')
+        logs_to_file.setFormatter(LoggingController.LOG_FORMAT)
+
+        # Records are written to log file using console log format
+        # Used by printer
+        # Used by console when headless
+        console_file = logging.handlers.RotatingFileHandler(self.logFileAddr, 'a')
+        console_file.setFormatter(LoggingController.CONSOLE_LOG_FORMAT)
+
+        return logs_to_file, console_file
+
+    def createStdOutHandlers(self) -> tuple[StreamHandler, StreamHandler, StreamHandler]:
+        # Records are printed to stdout with log format
+        # Used by logger when print_logs is enabled
+        log_stdout_handler = logging.StreamHandler(sys.stdout)
+        log_stdout_handler.setFormatter(get_log_stdout_format())
+
+        # Records are printed to stdout using console log format
+        # Used by printer when print_logs is enabled
+        log_console_stdout_handler = logging.StreamHandler(sys.stdout)
+        log_console_stdout_handler.setFormatter(LoggingController.CONSOLE_LOG_FORMAT)
+
+        # Records are written to console as messages, equivalent to calling print
+        # Used by console and printer
+        console_stdout_handler = logging.StreamHandler(sys.stdout)
+        console_stdout_handler.setFormatter(LoggingController.PRINT_FORMAT)
+        return console_stdout_handler, log_stdout_handler, log_console_stdout_handler
+
+    def getConsole(self):
+        return self.console
+
+    def getLogger(self):
+        return self.logger
+
+    def getPrinter(self):
+        return self.printer
+
+    def emptyHandlersFromLoggers(self):
+        loggers = (self.console, self.logger, self.printer)
+        for lg in loggers:
+            handlers = list(lg.handlers)
+            for h in handlers:
+                lg.removeHandler(h)
 
 
-# Records are written to console as messages, equivalent to calling print
-# Used by console and printer
-console_stdout_handler = logging.StreamHandler(sys.stdout)
-console_stdout_handler.setFormatter(PRINT_FORMAT)
+    def configureLoggers(self):
+        self.emptyHandlersFromLoggers()
 
-# Records are written to log file using console log format
-# Used by printer
-# Used by console when headless
-console_file_handler = logging.handlers.RotatingFileHandler(log_file_addr, 'a')
-console_file_handler.setFormatter(CONSOLE_LOG_FORMAT)
+        has_head = not self.bHeadless
 
-# Logger Base Configuration
-logger.addHandler(log_file_handler)
-logger.setLevel(logging.INFO)
+        if has_head:
+            self.console.addHandler(self.hConsoleOut)
+            self.printer.addHandler(self.hConsoleOut)
 
-# Console base configuration
-if headless:
-    console.addHandler(console_file_handler)
-else:
-    console.addHandler(console_stdout_handler)
-console.setLevel(logging.INFO)
+            if self.bLoggingEnabled:
+                if self.bLoggingToFile:
+                    self.logger.addHandler(self.hLogFile)
+                    self.printer.addHandler(self.hConsoleFile)
 
-# Printer base configuration
-printer.setLevel(logging.INFO)
-printer.addHandler(console_file_handler)
-printer.addHandler(console_stdout_handler)
+                if self.bPrintingLogs:
+                    self.logger.addHandler(self.hLogOut)
+                    self.printer.removeHandler(self.hConsoleOut)
+                    self.printer.addHandler(self.hLogConsoleOut)
 
-def is_logs_enabled():
-    return logger.hasHandlers()
+        else:
+            if self.bLoggingEnabled and self.bLoggingToFile:
+                self.logger.addHandler(self.hLogFile)
+                self.console.addHandler(self.hConsoleFile)
+                self.printer.addHandler(self.hConsoleFile)
 
-def enable_logs(enable: bool):
-    if not enable:
-        # When logs are dsiabled, there will be no logging at all to log file
-        # Console only prints to stdout, printer only prints to stdout
-        # Therefore remove all hanlders  that log to file
-        logger.removeHandler(log_file_handler)
-        logger.removeHandler(log_stdout_handler)
+    def setHeadless(self, enable:bool):
+        if enable:
+            self.bHeadless = True
+        else:
+            self.bHeadless = sys.stdout is None
+        self.configureLoggers()
 
-        console.removeHandler(console_file_handler)
+    def setLoggingEnabled(self, enable:bool):
+        self.bLoggingEnabled = enable
+        self.configureLoggers()
 
-        printer.removeHandler(console_file_handler)
-        printer.removeHandler(log_console_stdout_handler)
-    else:
-        logger.addHandler(log_file_handler)
-        printer.addHandler(console_file_handler)
+    def setLoggingToFile(self, enable:bool):
+        self.bLoggingToFile = enable
+        self.configureLoggers()
 
-        if bPrintingLogs:
-            printer.addHandler(log_console_stdout_handler)
-            logger.addHandler(log_stdout_handler)
+    def setPrintLogs(self, enable:bool):
+        self.bPrintingLogs = enable
+        self.configureLoggers()
 
-        if headless:
-            # If headless, console logs to file
-            console.addHandler(console_file_handler)
+    def changeLogFile(self, newFileAddr):
+        # Recreate log file handler and then reconfigure loggers
+        self.logFileAddr = newFileAddr
+        self.hLogFile, self.hConsoleFile = self.createFileHandlers()
+        self.configureLoggers()
 
-def set_headless(enable: bool):
-    global headless
-    if enable:
-        headless = True
-    else:
-        # We are not headless only if we have stdout
-        headless = sys.stdout is None
+    def getLogFile(self):
+        return self.logFileAddr
 
-    if headless:
-        # Script is running headlessly, so all console logs must be written to log file using log file format
-        # Replace print handler with log handler
-        logger.removeHandler(log_stdout_handler)
+    def isHeadless(self):
+        return self.bHeadless
 
-        printer.removeHandler(console_stdout_handler)
-        printer.removeHandler(log_console_stdout_handler)
+    def isLoggingdEnabled(self):
+        return self.bLoggingEnabled
 
-        console.removeHandler(console_stdout_handler)
-        console.addHandler(console_file_handler)
-    else:
-        # Not headless, so we can print to stdout
-        console.removeHandler(console_file_handler)
-        console.addHandler(console_stdout_handler)
-        printer.addHandler(console_stdout_handler)
+    def isLoggingToFile(self):
+        return self.bLoggingToFile
 
-        if bPrintingLogs:
-            printer.addHandler(log_stdout_handler)
-            logger.addHandler(log_stdout_handler)
+    def isPrintingLogs(self):
+        return self.bPrintingLogs
 
-    # Respect enabled rules
-    enable_logs(is_logs_enabled())
+    def flushLogs(self):
+        self.hLogFile.flush()
+        self.hConsoleFile.flush()
 
-def print_logs(enable: bool):
-    global bPrintingLogs
-    if headless or sys.stdout is None:
-        return
 
-    if enable:
-        bPrintingLogs = True
-        # Function automatically checks if handler is already in list, so we can just do this
-        logger.addHandler(log_stdout_handler)
-        printer.addHandler(log_console_stdout_handler)
-        printer.removeHandler(console_stdout_handler)
-    else:
-        bPrintingLogs = False
-        logger.removeHandler(log_stdout_handler)
-        printer.removeHandler(log_console_stdout_handler)
-        printer.addHandler(console_stdout_handler)
+    @staticmethod
+    def selfTest():
 
-    enable_logs(is_logs_enabled())
+        controller = LoggingController('bm.log')
 
-def is_printing_logs():
-    if headless or sys.stdout is None:
-        return False
-    return bPrintingLogs
+        # Set of tests and the expected handlers the loggers should have
+        tests = [
+            {
+                "test_no": 0,
+                "has_head": True,
+                "logs_enabled": True,
+                "logging_to_file": True,
+                "printing_logs": True,
+                "logger": [controller.hLogFile, controller.hLogOut],
+                "console": [controller.hConsoleOut],
+                "printer": [controller.hConsoleFile, controller.hLogConsoleOut]
+            },
+            {
+                "test_no": 1,
+                "has_head": True,
+                "logs_enabled": True,
+                "logging_to_file": True,
+                "printing_logs": False,
+                "logger": [controller.hLogFile],
+                "console": [controller.hConsoleOut],
+                "printer": [controller.hConsoleOut, controller.hConsoleFile]
+            },
+            {
+                "test_no": 2,
+                "has_head": True,
+                "logs_enabled": True,
+                "logging_to_file": False,
+                "printing_logs": True,
+                "logger": [controller.hLogOut],
+                "console": [controller.hConsoleOut],
+                "printer": [controller.hLogConsoleOut]
+            },
+            {
+                "test_no": 3,
+                "has_head": True,
+                "logs_enabled": True,
+                "logging_to_file": False,
+                "printing_logs": False,
+                "logger": [],
+                "console": [controller.hConsoleOut],
+                "printer": [controller.hConsoleOut]
+            },
+            {
+                "test_no": 4,
+                "has_head": True,
+                "logs_enabled": False,
+                "logging_to_file": True,
+                "printing_logs": True,
+                "logger": [],
+                "console": [controller.hConsoleOut],
+                "printer": [controller.hConsoleOut]
+            },
+            {
+                "test_no": 5,
+                "has_head": True,
+                "logs_enabled": False,
+                "logging_to_file": True,
+                "printing_logs": False,
+                "logger": [],
+                "console": [controller.hConsoleOut],
+                "printer": [controller.hConsoleOut]
+            },
+            {
+                "test_no": 6,
+                "has_head": True,
+                "logs_enabled": False,
+                "logging_to_file": False,
+                "printing_logs": True,
+                "logger": [],
+                "console": [controller.hConsoleOut],
+                "printer": [controller.hConsoleOut]
+            },
+            {
+                "test_no": 7,
+                "has_head": True,
+                "logs_enabled": False,
+                "logging_to_file": False,
+                "printing_logs": False,
+                "logger": [],
+                "console": [controller.hConsoleOut],
+                "printer": [controller.hConsoleOut]
+            },
+            {
+                "test_no": 8,
+                "has_head": False,
+                "logs_enabled": True,
+                "logging_to_file": True,
+                "printing_logs": True,
+                "logger": [controller.hLogFile],
+                "console": [controller.hConsoleFile],
+                "printer": [controller.hConsoleFile]
+            },
+            {
+                "test_no": 9,
+                "has_head": False,
+                "logs_enabled": True,
+                "logging_to_file": True,
+                "printing_logs": False,
+                "logger": [controller.hLogFile],
+                "console": [controller.hConsoleFile],
+                "printer": [controller.hConsoleFile]
+            },
+            {
+                "test_no": 10,
+                "has_head": False,
+                "logs_enabled": True,
+                "logging_to_file": False,
+                "printing_logs": True,
+                "logger": [],
+                "console": [],
+                "printer": []
+            },
+            {
+                "test_no": 11,
+                "has_head": False,
+                "logs_enabled": True,
+                "logging_to_file": False,
+                "printing_logs": False,
+                "logger": [],
+                "console": [],
+                "printer": []
+            },
+            {
+                "test_no": 12,
+                "has_head": False,
+                "logs_enabled": False,
+                "logging_to_file": True,
+                "printing_logs": True,
+                "logger": [],
+                "console": [],
+                "printer": []
+            },
+            {
+                "test_no": 13,
+                "has_head": False,
+                "logs_enabled": False,
+                "logging_to_file": True,
+                "printing_logs": False,
+                "logger": [],
+                "console": [],
+                "printer": []
+            },
+            {
+                "test_no": 14,
+                "has_head": False,
+                "logs_enabled": False,
+                "logging_to_file": False,
+                "printing_logs": True,
+                "logger": [],
+                "console": [],
+                "printer": []
+            },
+            {
+                "test_no": 15,
+                "has_head": False,
+                "logs_enabled": False,
+                "logging_to_file": False,
+                "printing_logs": False,
+                "logger": [],
+                "console": [],
+                "printer": []
+            }
+        ]
 
-def log_to_file(file_addr: str):
-    global log_file_handler
-    global console_file_handler
-    global log_file_addr
+        def get_handlers_str(handlers):
+            strs = []
+            for h in handlers:
+                if h == controller.hLogFile:
+                    strs.append('hLogFile')
+                elif h == controller.hConsoleFile:
+                    strs.append('hConsoleFile')
+                elif h == controller.hConsoleOut:
+                    strs.append('hConsoleOut')
+                elif h == controller.hLogOut:
+                    strs.append('hLogOut')
+                elif h == controller.hLogConsoleOut:
+                    strs.append('hLogConsoleOut')
 
-    old_console_handler = console_file_handler
-    old_log_handler = log_file_handler
-    log_file_addr = file_addr
+            st = ', '.join(strs)
+            return f'[{st}]'
 
-    log_file_handler = logging.handlers.RotatingFileHandler(log_file_addr, 'a')
-    log_file_handler.setFormatter(LOG_FORMAT)
-    console_file_handler = logging.handlers.RotatingFileHandler(log_file_addr, 'a')
-    console_file_handler.setFormatter(CONSOLE_LOG_FORMAT)
+        def check_handler_list(handlers1, handlers2):
+            return set(handlers1) == set(handlers2)
 
-    logger.removeHandler(old_log_handler)
-    logger.addHandler(log_file_handler)
+        def pass_str(bPass):
+            return 'PASS' if bPass else 'FAIL'
 
-    printer.removeHandler(old_console_handler)
-    printer.addHandler(console_file_handler)
+        failed = []
 
-    if headless:
-        console.removeHandler(old_console_handler)
-        console.addHandler(console_file_handler)
+        for test in tests:
+            has_head = test['has_head']
+            logs_enabled = test['logs_enabled']
+            logging_to_file = test['logging_to_file']
+            printing_logs = test['printing_logs']
 
-def get_log_file_addr():
-    return log_file_addr
+            # Set parameters
+            controller.setHeadless(not has_head)
+            controller.setLoggingEnabled(logs_enabled)
+            controller.setLoggingToFile(logging_to_file)
+            controller.setPrintLogs(printing_logs)
+
+            # Check if handlers match expected listing
+            loggerPassed = check_handler_list(test['logger'], controller.logger.handlers)
+            consolePassed = check_handler_list(test['console'], controller.console.handlers)
+            printerPassed = check_handler_list(test['printer'], controller.printer.handlers)
+
+            no = test["test_no"]
+            if not(loggerPassed and consolePassed and printerPassed):
+                failed.append(no)
+
+            print(f'Test {no} =================================================================')
+            print(f'Has Head        : {has_head}')
+            print(f'Logging Enabled : {logs_enabled}')
+            print(f'Logging To File : {logging_to_file}')
+            print(f'Printing Logs   : {printing_logs}')
+            print()
+            print(f'logger          : {pass_str(loggerPassed)} ({get_handlers_str(controller.logger.handlers)})')
+            print(f'console         : {pass_str(consolePassed)} ({get_handlers_str(controller.console.handlers)})')
+            print(f'printer         : {pass_str(printerPassed)} ({get_handlers_str(controller.printer.handlers)})')
+            print('')
+
+        print('Tests Completed')
+        print(f'{len(tests)-len(failed)}/{len(tests)} Passed')
+
+        if len(failed) > 0:
+            print(f'Failed Tests: {failed}')
+
+
+
+controller = LoggingController(os.path.expanduser('~\\Battery_Monitor_Initial_Log.log'))
+logger = controller.getLogger()
+console = controller.getConsole()
+printer = controller.getPrinter()
 
 def flush_logs():
-    log_file_handler.flush()
-    console_file_handler.flush()
-
-def logging_to_file():
-    return log_file_handler in logger.handlers
-
+    controller.flushLogs()
 
 def new_log_file(logdir):
     return os.path.join(logdir,

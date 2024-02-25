@@ -8,8 +8,7 @@ script_loc_dir = os.path.split(os.path.realpath(__file__))[0]
 if script_loc_dir not in sys.path:
     sys.path.append(script_loc_dir)
 
-from scripts.bm_logging import log_to_file, logger, console, enable_logs, print_logs, get_log_file_addr, \
-    flush_logs, is_logs_enabled, new_log_file, is_printing_logs, set_headless
+from scripts.bm_logging import controller, logger, console, new_log_file, flush_logs
 
 from scripts.functions import send_notification, error_notification
 from scripts.BatteryMonitor import BatteryMonitor, EmailNotifier
@@ -32,24 +31,35 @@ def main():
         args = parse_args()
         headless = args.headless
 
-        # Check if the log directory exists
-        if not os.path.exists(args.logDir):
-            raise Exception(f'Log Directory "{args.logDir}" does not exist')
+        if args.noLogFile and headless:
+            raise Exception('Log file is required when script is running in headless mode')
 
-        # Verified log directory exists, set proper logging configuration
-        actualLogFile = new_log_file(args.logDir)
-        log_to_file(actualLogFile)
-        set_headless(headless)
-        enable_logs(not(args.testing or args.noLogs))
-        print_logs(args.printLogs)
+        # Check if the log directory exists
+        if args.noLogFile:
+            # If this exists, then we should essentially just print logs
+            controller.setLoggingToFile(False)
+            controller.setPrintLogs(True)
+        else:
+            # Configure log file
+            if not os.path.exists(args.logDir):
+                raise Exception(f'Log Directory "{args.logDir}" does not exist')
+
+            # Verified log directory exists, set proper logging configuration
+            actualLogFile = new_log_file(args.logDir)
+            controller.changeLogFile(actualLogFile)
+            controller.setPrintLogs(args.printLogs)
+
+        controller.setHeadless(headless)
+        controller.setLoggingEnabled(not(args.testing or args.noLogs))
 
         # Print logging configuration
-        if is_logs_enabled():
-            console.info(f'Logging To {get_log_file_addr()}')
-            if is_printing_logs():
-                console.info(f'Logs are also printed to stdout.')
+        if controller.isLoggingdEnabled():
+            if controller.isLoggingToFile():
+                console.info(f'Log File: {controller.getLogFile()}')
+            if controller.isPrintingLogs():
+                console.info(f'Logs are being printed to stdout.')
         else:
-            console.info('Logs are not being made')
+            console.info('No Logs Are Being Made')
 
         flush_logs()
 
@@ -86,6 +96,7 @@ def main():
             args.batteryMin,
             args.batteryMax,
             args.grain,
+            args.adaptivity,
             TimeString.parse(args.alertPeriod),
             args.maxAttempts,
             smartPlug,
@@ -96,10 +107,10 @@ def main():
         logger.info('Script Started')
 
         if headless:
-            started_notif(get_log_file_addr())
+            started_notif(controller.getLogFile())
             logger.info('Running in headless mode')
 
-        logger.info(f'min={args.batteryMin}%, max={args.batteryMax}%, grain={args.grain}%, alertEvery={TimeString.parse(args.alertPeriod)}s, maxAttempts={args.maxAttempts}')
+        logger.info(f'min={args.batteryMin}%, max={args.batteryMax}%, grain={args.grain}%, adaptivity={args.adaptivity} alertEvery={TimeString.parse(args.alertPeriod)}s, maxAttempts={args.maxAttempts}')
         logger.info(f'Plug Info: Network="{smartPlug.home_network}", Plug IP={smartPlug.plug_ip}, Plug Name="{smartPlug.plug_name}"')
 
         if plugCreds is not None:
@@ -120,7 +131,7 @@ def main():
         if headless:
             # WRITE error to script
             logger.error(traceback.format_exc())
-            error_notification(e, get_log_file_addr())
+            error_notification(e, controller.getLogFile())
         else:
             traceback.print_exc()
 
