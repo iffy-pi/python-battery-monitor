@@ -6,11 +6,11 @@ import logging
 script_loc_dir = os.path.split(os.path.realpath(__file__))[0]
 if script_loc_dir not in sys.path:  sys.path.append(script_loc_dir)
 from scripts.SmartPlugController import SmartPlugController
-from scripts.arg_parsing import get_args_from_config_cli
+from scripts.arg_parsing import get_args_from_config_in_sysargs
 from scripts.functions import get_plug_password
 
 def main():
-    config = get_args_from_config_cli()
+    config = get_args_from_config_in_sysargs()
     plc = SmartPlugController(
         config.plugIP,
         config.plugName,
