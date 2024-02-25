@@ -97,7 +97,15 @@ class ScriptSleepController:
         flush_logs()
 
         if verbose:
-            timerSleep(secs, checkFnc=self.checkUnlockSignal if checkUnlockSignal else None)
+            try:
+                timerSleep(secs, checkFnc=self.checkUnlockSignal if checkUnlockSignal else None)
+            except KeyboardInterrupt:
+                # Timer sleep writes on the same line, so if interrupt occurs we want to push to next line
+                # Do so by printing new line character to next line then raising interrupt
+                if not self.headless:
+                    print('')
+                raise KeyboardInterrupt
+
             return
 
         if checkUnlockSignal:
@@ -147,8 +155,8 @@ class ScriptSleepController:
             return self.initSleepPred
 
         # Include tracked drift as time between calls
-        logger.info(f'Added {self.drift}s to previously predicted sleep period ({self.sleepPeriod}s)')
         prev_period = self.sleepPeriod + self.drift
+        logger.info(f'Previously Predicted Sleep Period: {prev_period}s ({self.sleepPeriod}s sleep period + {self.drift}s drift)')
         self.drift = 0
 
         percent_drop_per_sec = abs(self.curPercent - self.prevPercent) / float(prev_period)
@@ -163,10 +171,11 @@ class ScriptSleepController:
 
         # use the round robin formulat to calculate our next prediction
         next_pred = int(self.predAdaptivity * actual_drop_period + (1 - self.predAdaptivity) * prev_period)
-        logger.info(
-            'Calculated Prediction: %.2fs (Calculated from adaptivity=%.2f, grain=%d, predicted drop time=%.2fs, actual drop time=%.2fs)' % (
-            next_pred, self.predAdaptivity, self.checkIntervalPercentage, prev_period, actual_drop_period ))
 
+        logger.info('Calculated Prediction: %.2fs (Exponential Averaging with alpha=%.2f)' % (next_pred, self.predAdaptivity))
+        logger.info(f'Exponential Averaging - Previous Prediction To Change By {self.checkIntervalPercentage}% = {TimeString.make(prev_period)}')
+        logger.info(f'Exponential Averaging - Actual Percentage Change = {abs(self.curPercent - self.prevPercent)}%')
+        logger.info(f'Exponential Averaging - Actual Time Required To Change By {self.checkIntervalPercentage}% = {TimeString.make(actual_drop_period)} ')
 
         return next_pred
 
