@@ -27,7 +27,7 @@ class EmailNotifier:
 
 
 class BatteryMonitor:
-    def __init__(self, batteryFloor: int, batteryCeiling: int, checkGrain: int, alertPeriodSecs: int, maxAttempts: int, plug: SmartPlugController, emailer: EmailNotifier, headless:bool = False):
+    def __init__(self, batteryFloor: int, batteryCeiling: int, checkGrain: int, adaptivity: float, alertPeriodSecs: int, maxAttempts: int, plug: SmartPlugController, emailer: EmailNotifier, headless:bool = False):
         self.batteryMin = batteryFloor
         self.batteryMax = batteryCeiling
         self.grain = checkGrain
@@ -41,7 +41,8 @@ class BatteryMonitor:
             self.batteryMin,
             self.batteryMax,
             checkIntervalPercentage=self.grain,
-            headless=self.headless)
+            headless=self.headless,
+            predAdaptivity=adaptivity)
 
     def monitorBattery(self):
         iters = 0
@@ -67,11 +68,11 @@ class BatteryMonitor:
                 iters += 1
             except KeyboardInterrupt:
                 if self.headless:
-                    printer.info('\nExiting due to keyboard interrupt')
+                    printer.info('Exiting due to keyboard interrupt')
                     return
                 else:
                     try:
-                        console.info('\nPress Ctrl+C again in 10s to end script')
+                        console.info('Press Ctrl+C again in 10s to end script')
                         self.sleepController.trackedSleep(secs=10)
                         iters = 0
                     except KeyboardInterrupt:

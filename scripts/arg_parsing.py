@@ -24,13 +24,15 @@ class CommandLineArgs:
         self.batteryMin = args.min
         self.batteryMax = args.max
         self.grain = args.grain
+        self.adaptivity = args.adaptivity
         self.alertPeriod = args.alert
         self.maxAttempts = args.max_attempts
-        self.emailUsername = args.email_cred
+        self.emailUsername = args.email_creds
         self.emailRecipient = args.email_to
-        self.plugAccUsername = args.plug_cred
+        self.plugAccUsername = args.plug_creds
         self.noLogs = args.nologs
         self.printLogs = args.printlogs
+        self.noLogFile = args.nologfile
         self.testing = args.testing
 
     def checkArgs(self):
@@ -158,8 +160,17 @@ def make_arg_parser(configFirst=False):
         required=False,
         type=int,
         metavar='<Battery Check Increment>',
-        help="The percentage increment the script should check the battery at, e.g means check every 5%%",
+        help="How often (in battery percentage) should the script check the battery e.g. 5 for every 5% ",
         default=5,
+    )
+
+    argParser.add_argument(
+        "-adaptivity",
+        required=False,
+        type=float,
+        metavar='<Battery Check Increment>',
+        help="How adaptive sleep predictions are. A floating point value between 0 and 1",
+        default=0.90,
     )
 
     argParser.add_argument(
@@ -181,7 +192,7 @@ def make_arg_parser(configFirst=False):
     )
 
     argParser.add_argument(
-        "-email-cred",
+        "-email-creds",
         required=False,
         type=str,
         metavar='<username>',
@@ -193,11 +204,11 @@ def make_arg_parser(configFirst=False):
         required=False,
         type=str,
         metavar='<email>',
-        help="The recipient of alert emails",
+        help="The recipient of alert emails. Requires -email-cred argument",
     )
 
     argParser.add_argument(
-        "-plug-cred",
+        "-plug-creds",
         required=False,
         type=str,
         metavar='<email>',
@@ -209,6 +220,13 @@ def make_arg_parser(configFirst=False):
         '--nologs',
         action='store_true',
         help='Disable logs'
+    )
+
+    argParser.add_argument(
+        '--nologfile',
+        '--nologfile',
+        action='store_true',
+        help='Logs will not be saved to any file, but instead will be printed to console'
     )
 
     argParser.add_argument(
@@ -227,22 +245,29 @@ def make_arg_parser(configFirst=False):
 
     return argParser
 
-def convert_config_to_args(configFile, sysArgs, overrideSysArgs=False):
+def gen_cli_args_from_config(configFile: str, sysArgs: list, useSysArgIfExists: bool=True) -> list:
+    """
+    Generates the list of command line arguments from the JSON config fil
+    @param configFile: The JSON config file
+    @param sysArgs: The original command line argumentts
+    @param useSysArgIfExists: When true, if a command line flag is specified in the original set of arguments it will NOT be replaced by the one in the config file
+    @return:
+    """
     with open(configFile, 'r') as file:
         config = json.load(file)
 
     args = []
     for key in config:
-        cmdLineFlag = f'--{key}' if type(config[key]) == bool else f'-{key}'
-
-        if not overrideSysArgs and cmdLineFlag in sysArgs:
+        cmdLineFlag = key
+        if useSysArgIfExists and cmdLineFlag in sysArgs:
+            # Do not generate this argument if it exists in the system arguments
             continue
 
         if type(config[key]) == bool and config[key]:
-            args.append(f'--{key}')
+            args.append(cmdLineFlag)
             continue
 
-        args.append(f'-{key}')
+        args.append(cmdLineFlag)
         args.append(str(config[key]))
 
     return args
@@ -256,15 +281,15 @@ def parse_args() -> CommandLineArgs:
     if args.config is not None:
         if not path.exists(args.config):
             raise ArgumentException(f'Config file "{args.config}" does not exist!')
-        newArgs = convert_config_to_args(args.config, sys.argv)
+        newArgs = gen_cli_args_from_config(args.config, sys.argv)
         sys.argv += newArgs
 
     args = make_arg_parser().parse_args()
     return CommandLineArgs(args)
 
-def get_args_from_config_cli() -> CommandLineArgs:
+def get_args_from_config_in_sysargs() -> CommandLineArgs:
     """
-    Returns set of arguments for -config in command line
+    Returns set of arguments for -config in command line, and restores the original set of system arguments
     """
     sysArgs = list(sys.argv)
 
@@ -279,7 +304,7 @@ def get_args_from_config_cli() -> CommandLineArgs:
     if not path.exists(configFile):
         raise ArgumentException(f'Config file "{configFile}" does not exist!')
 
-    newArgs = convert_config_to_args(configFile, [])
+    newArgs = gen_cli_args_from_config(configFile, [])
     sys.argv = [sys.argv[0]] + newArgs
     args = make_arg_parser().parse_args()
     sys.argv = sysArgs
