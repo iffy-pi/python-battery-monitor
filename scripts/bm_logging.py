@@ -7,8 +7,46 @@ from datetime import datetime
 from time import time
 from scripts.functions import get_log_format, get_console_log_format, get_log_stdout_format
 
+"""
+Logger Configuration:
+We use the following loggers in our script, which are provided as global variables:
+- logger
+    - Logs records to file using LOG_FORMAT
+    - Prints to stdout if print logs is enabled
+    - if logs are disabled or no log file:
+        - Records are not logged
+    - If printing logs:
+        - Records are printed to stdout
+    - If headless:
+        - Printing logs has no effect
+- console
+    - Records are printed to stdout with PRINT_FORMAT
+    - If script is headless
+        - Printing logs has no effect
+        - Records are logged to log file with LOG_CONSOLE_FORMAT
+        - If logs are disabled or no log file:
+            - Records are not logged
+- printer
+    - Prints and logs at the same time
+    - Records are logged to file with LOG_CONSOLE_FORMAT and printed to stdout using PRINT_FORMAT
+    - If printing logs:
+        - Records will now be printed to stdout using LOG_CONSOLE_FORMAT
+    - If logs are disabled or no log file:
+        - Records are ONLY printed to stdout using PRINT_FORMAT
+    - If script is headless
+        - Printing logs does nothing
+        - Records are only logged to file with LOG_CONSOLE_FORMAT
+        - If logs are disabled or no log file:
+            - Nothing will be logged
+
+You can change logging behaviour with the global controller variable
+- controller
+    - Provides methods to set headless, logs enabled, logging to file and printing logs
+    - Also allows you to change the log file being used
+"""
+
+
 class LoggingController:
-    hConsoleFile: RotatingFileHandler
     LOG_FORMAT = get_log_format()
     CONSOLE_LOG_FORMAT = get_console_log_format()
     PRINT_FORMAT = logging.Formatter('%(message)s')
